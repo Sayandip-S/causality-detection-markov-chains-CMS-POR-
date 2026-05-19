@@ -3,7 +3,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
 # Reproducibility
-np.random.seed(42)
+#np.random.seed(42)
 
 # States:
 # 0 = initial
@@ -105,9 +105,43 @@ print(f"Precision: {precision_score(y_test, y_pred):.3f}")
 print(f"Recall   : {recall_score(y_test, y_pred):.3f}")
 print(f"F1-score : {f1_score(y_test, y_pred):.3f}")
 print()
-print("Confusion matrix:")
-print(confusion_matrix(y_test, y_pred))
 
+print()
+# Detailed confusion matrix explanation
+tn, fp, fn, tp = confusion_matrix(y_test, y_pred).ravel()
+print()
+print("Detailed Confusion Matrix")
+print("-------------------------")
+print(f"True Negatives  (TN): {tn}  → Actually safe, predicted safe")
+print(f"False Positives (FP): {fp}  → Actually safe, predicted error / false alarm")
+print(f"False Negatives (FN): {fn}  → Actually error, predicted safe / missed error")
+print(f"True Positives  (TP): {tp}  → Actually error, predicted error")
+print()
+
+print("Confusion Matrix Table")
+print("----------------------")
+print("                  Predicted Safe   Predicted Error")
+print(f"Actually Safe         {tn:<15} {fp}")
+print(f"Actually Error        {fn:<15} {tp}")
+
+
+# Manual metric calculations
+accuracy_manual = (tp + tn) / (tp + tn + fp + fn)
+precision_manual = tp / (tp + fp) if (tp + fp) > 0 else 0
+recall_manual = tp / (tp + fn) if (tp + fn) > 0 else 0
+f1_manual = (
+    2 * precision_manual * recall_manual / (precision_manual + recall_manual)
+    if (precision_manual + recall_manual) > 0
+    else 0
+)
+
+print()
+print("Manual Metric Explanation")
+print("-------------------------")
+print(f"Accuracy  = (TP + TN) / Total = ({tp} + {tn}) / {tp + tn + fp + fn} = {accuracy_manual:.3f}")
+print(f"Precision = TP / (TP + FP)    = {tp} / ({tp} + {fp}) = {precision_manual:.3f}")
+print(f"Recall    = TP / (TP + FN)    = {tp} / ({tp} + {fn}) = {recall_manual:.3f}")
+print(f"F1-score  = 2 * Precision * Recall / (Precision + Recall) = {f1_manual:.3f}")
 # Estimate probability raising manually
 num_samples = 10000
 paths = [generate_path() for _ in range(num_samples)]
