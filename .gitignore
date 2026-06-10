@@ -1,15 +1,28 @@
-@"
-# Virtual environment
+# Python virtual environments
 venv/
-env/
+.venv/
+
+# Python cache
 __pycache__/
-*.pyc
+*.py[cod]
 
 # IDE
 .vscode/
-.idea/
 
-# Data
-*.log
-*.pkl
-"@ | Out-File -FilePath .gitignore -Encoding utf8
+# Generated datasets
+data/raw/*
+data/processed/*
+
+# Generated results
+results/metrics/*
+results/candidate_states/*
+
+# Keep empty directories
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!results/metrics/.gitkeep
+!results/candidate_states/.gitkeep
+
+# Operating-system files
+.DS_Store
+Thumbs.db
