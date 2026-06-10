@@ -1,0 +1,41 @@
+dtmc
+
+module simple_dtmc
+
+    // State variable:
+    // 0 = initial
+    // 1 = normal state 1
+    // 2 = normal state 2
+    // 3 = candidate warning/cause state
+    // 4 = error state
+    // 5 = safe state
+
+    s : [0..5] init 0;
+
+    // Initial state
+    [] s=0 -> 0.6 : (s'=1)
+            + 0.4 : (s'=2);
+
+    // From normal state 1
+    [] s=1 -> 0.7 : (s'=3)
+            + 0.3 : (s'=5);
+
+    // From normal state 2
+    [] s=2 -> 0.2 : (s'=3)
+            + 0.8 : (s'=5);
+
+    // From candidate state 3
+    [] s=3 -> 0.8 : (s'=4)
+            + 0.2 : (s'=5);
+
+    // Error is absorbing
+    [] s=4 -> 1.0 : (s'=4);
+
+    // Safe is absorbing
+    [] s=5 -> 1.0 : (s'=5);
+
+endmodule
+
+label "candidate" = s=3;
+label "error" = s=4;
+label "safe" = s=5;
