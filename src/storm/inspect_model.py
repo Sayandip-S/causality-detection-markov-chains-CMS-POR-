@@ -18,17 +18,27 @@ def main() -> None:
     for state in model.states:
         labels = list(state.labels)
 
+        valuation = model.state_valuations.get_string(state.id)
+
         print(
-            f"State ID: {state.id}, "
+            f"Storm state ID: {state.id}, "
+            f"PRISM valuation: {valuation}, "
             f"Labels: {labels}"
         )
 
         for action in state.actions:
             for transition in action.transitions:
+                target_id = transition.column
+                probability = float(transition.value())
+
+                target_valuation = (
+                    model.state_valuations.get_string(target_id)
+                )
+
                 print(
-                    "  -> "
-                    f"state {transition.column} "
-                    f"with probability {float(transition.value()):.6f}"
+                    f"  -> Storm state {target_id} "
+                    f"({target_valuation}) "
+                    f"with probability {probability:.6f}"
                 )
 
         print()

@@ -19,12 +19,9 @@ def load_prism_model(
     property_path: Path = DEFAULT_PROPERTY_PATH,
 ):
     """
-    Parse a PRISM program and build its Storm sparse model.
+    Parse a PRISM program and build a Storm sparse model.
 
-    Returns
-    -------
-    tuple
-        program, properties, model
+    The model includes state labels and PRISM state-variable valuations.
     """
 
     model_path = Path(model_path)
@@ -63,9 +60,16 @@ def load_prism_model(
             "No valid Storm properties were parsed."
         )
 
-    model = stormpy.build_model(
+    builder_options = stormpy.BuilderOptions(
+        [prop.raw_formula for prop in properties]
+    )
+
+    builder_options.set_build_state_valuations()
+    builder_options.set_build_all_labels()
+
+    model = stormpy.build_sparse_model_with_options(
         program,
-        properties,
+        builder_options,
     )
 
     return program, properties, model
