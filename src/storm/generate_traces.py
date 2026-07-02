@@ -9,15 +9,31 @@ from typing import Iterable
 
 import stormpy
 
-from model_utils import (
-    DEFAULT_PROPERTY_PATH,
-    PROJECT_ROOT,
-    load_prism_model,
-)
+try:
+    # Works when running as a package:
+    # python -m src.storm.generate_traces
+    from src.storm.model_utils import (
+        DEFAULT_MODEL_PATH,
+        DEFAULT_PROPERTY_PATH,
+        PROJECT_ROOT,
+        load_prism_model,
+    )
+except ModuleNotFoundError:
+    # Works when running directly:
+    # python src/storm/generate_traces.py
+    from model_utils import (
+        DEFAULT_MODEL_PATH,
+        DEFAULT_PROPERTY_PATH,
+        PROJECT_ROOT,
+        load_prism_model,
+    )
 
 
 DEFAULT_OUTPUT_PATH = (
-    PROJECT_ROOT / "data" / "raw" / "simple_dtmc_traces.csv"
+    PROJECT_ROOT
+    / "data"
+    / "raw"
+    / "simple_dtmc_traces.csv"
 )
 
 
@@ -25,33 +41,90 @@ DEFAULT_OUTPUT_PATH = (
 class TraceResult:
     """
     Stores one simulated execution trace.
+
+    Attributes
+    ----------
+    trace_id:
+        Unique identifier of the trace.
+
+    state_ids:
+        Storm internal state IDs visited during the trace.
+
+    valuations:
+        Original PRISM variable valuations of visited states.
+
+    terminal_label:
+        Reason the trace stopped:
+        target label, negative terminal label, or "max_steps".
+
+    reached_target:
+        True if the positive target state was reached.
+
+    reached_monitor:
+        True if the optional monitor/candidate label was visited.
+
+    number_of_transitions:
+        Number of transitions taken during the trace.
     """
 
     trace_id: int
     state_ids: list[int]
     valuations: list[str]
     terminal_label: str
-    reached_error: bool
-    reached_candidate: bool
+    reached_target: bool
+    reached_monitor: bool
     number_of_transitions: int
 
 
-def get_state_labels(model, state_id: int) -> set[str]:
+def normalize_optional_label(
+    label: str | None,
+) -> str | None:
+    """
+    Convert an empty label or the text 'none' into Python None.
+    """
+
+    if label is None:
+        return None
+
+    cleaned_label = label.strip()
+
+    if cleaned_label.lower() in {
+        "",
+        "none",
+        "null",
+    }:
+        return None
+
+    return cleaned_label
+
+
+def get_state_labels(
+    model,
+    state_id: int,
+) -> set[str]:
     """
     Return all labels associated with one Storm state.
     """
+
     state = model.states[state_id]
     return set(state.labels)
 
 
-def get_state_valuation(model, state_id: int) -> str:
+def get_state_valuation(
+    model,
+    state_id: int,
+) -> str:
     """
     Return the original PRISM valuation of one Storm state.
 
-    Example:
-        [s=3]
+    Example
+    -------
+    [s=3]
     """
-    return model.state_valuations.get_string(state_id)
+
+    return model.state_valuations.get_string(
+        state_id
+    )
 
 
 def get_outgoing_transitions(
@@ -59,32 +132,42 @@ def get_outgoing_transitions(
     state_id: int,
 ) -> list[tuple[int, float]]:
     """
-    Extract outgoing transitions from one DTMC state.
+    Extract all outgoing transitions from one DTMC state.
 
     Returns
     -------
-    list of tuple
-        Each tuple is:
-        (target_state_id, transition_probability)
-    """
-    state = model.states[state_id]
+    list[tuple[int, float]]
+        Pairs of:
 
+        (target Storm state ID, probability)
+    """
+
+    state = model.states[state_id]
     actions = list(state.actions)
 
     if len(actions) != 1:
         raise ValueError(
             "This trace generator currently supports DTMCs only. "
-            f"State {state_id} has {len(actions)} actions."
+            f"State {state_id} has {len(actions)} actions. "
+            "More than one action may indicate nondeterminism."
         )
 
     transitions: list[tuple[int, float]] = []
 
     for transition in actions[0].transitions:
-        target_state = int(transition.column)
-        probability = float(transition.value())
+        target_state = int(
+            transition.column
+        )
+
+        probability = float(
+            transition.value()
+        )
 
         transitions.append(
-            (target_state, probability)
+            (
+                target_state,
+                probability,
+            )
         )
 
     if not transitions:
@@ -111,8 +194,9 @@ def sample_next_state(
     random_generator: random.Random,
 ) -> int:
     """
-    Sample one target state according to transition probabilities.
+    Sample one successor according to transition probabilities.
     """
+
     random_value = random_generator.random()
     cumulative_probability = 0.0
 
@@ -122,7 +206,7 @@ def sample_next_state(
         if random_value <= cumulative_probability:
             return target_state
 
-    # Protect against very small floating-point rounding errors.
+    # Floating-point safety fallback.
     return transitions[-1][0]
 
 
@@ -131,50 +215,87 @@ def simulate_trace(
     trace_id: int,
     random_generator: random.Random,
     maximum_steps: int,
+    target_label: str,
+    negative_terminal_label: str | None = None,
+    monitor_label: str | None = None,
 ) -> TraceResult:
     """
-    Simulate one path through the Storm-built DTMC.
+    Simulate one execution path through a Storm-built DTMC.
 
     The trace stops when:
-    - an error-labelled state is reached;
-    - a safe-labelled state is reached;
-    - maximum_steps is reached.
+
+    1. the positive target label is reached;
+    2. the negative terminal label is reached;
+    3. the maximum number of transitions is reached.
+
+    Examples
+    --------
+    Simple DTMC:
+
+        target_label="error"
+        negative_terminal_label="safe"
+        monitor_label="candidate"
+
+    BRP:
+
+        target_label="target"
+        negative_terminal_label="success"
+        monitor_label=None
     """
-    initial_states = list(model.initial_states)
+
+    initial_states = list(
+        model.initial_states
+    )
 
     if len(initial_states) != 1:
         raise ValueError(
-            "This first implementation expects exactly one "
-            f"initial state, but found {len(initial_states)}."
+            "This implementation expects exactly one initial "
+            f"state, but found {len(initial_states)}."
         )
 
-    current_state = int(initial_states[0])
+    current_state = int(
+        initial_states[0]
+    )
 
-    state_ids = [current_state]
-    valuations = [
-        get_state_valuation(model, current_state)
+    state_ids = [
+        current_state
     ]
 
-    reached_error = False
-    reached_candidate = False
+    valuations = [
+        get_state_valuation(
+            model,
+            current_state,
+        )
+    ]
+
+    reached_target = False
+    reached_monitor = False
     terminal_label = "max_steps"
 
-    for _ in range(maximum_steps + 1):
+    for _ in range(maximum_steps):
         labels = get_state_labels(
             model,
             current_state,
         )
 
-        if "candidate" in labels:
-            reached_candidate = True
+        if (
+            monitor_label is not None
+            and monitor_label in labels
+        ):
+            reached_monitor = True
 
-        if "error" in labels:
-            reached_error = True
-            terminal_label = "error"
+        if target_label in labels:
+            reached_target = True
+            terminal_label = target_label
             break
 
-        if "safe" in labels:
-            terminal_label = "safe"
+        if (
+            negative_terminal_label is not None
+            and negative_terminal_label in labels
+        ):
+            terminal_label = (
+                negative_terminal_label
+            )
             break
 
         transitions = get_outgoing_transitions(
@@ -187,24 +308,57 @@ def simulate_trace(
             random_generator,
         )
 
-        state_ids.append(current_state)
+        state_ids.append(
+            current_state
+        )
+
         valuations.append(
             get_state_valuation(
                 model,
                 current_state,
             )
         )
+
     else:
-        terminal_label = "max_steps"
+        # The maximum number of transitions was taken.
+        # Check whether the final state itself is terminal.
+        final_labels = get_state_labels(
+            model,
+            current_state,
+        )
+
+        if (
+            monitor_label is not None
+            and monitor_label in final_labels
+        ):
+            reached_monitor = True
+
+        if target_label in final_labels:
+            reached_target = True
+            terminal_label = target_label
+
+        elif (
+            negative_terminal_label is not None
+            and negative_terminal_label
+            in final_labels
+        ):
+            terminal_label = (
+                negative_terminal_label
+            )
+
+        else:
+            terminal_label = "max_steps"
 
     return TraceResult(
         trace_id=trace_id,
         state_ids=state_ids,
         valuations=valuations,
         terminal_label=terminal_label,
-        reached_error=reached_error,
-        reached_candidate=reached_candidate,
-        number_of_transitions=len(state_ids) - 1,
+        reached_target=reached_target,
+        reached_monitor=reached_monitor,
+        number_of_transitions=(
+            len(state_ids) - 1
+        ),
     )
 
 
@@ -213,10 +367,16 @@ def generate_traces(
     number_of_traces: int,
     maximum_steps: int,
     seed: int,
+    target_label: str,
+    negative_terminal_label: str | None = None,
+    monitor_label: str | None = None,
 ) -> list[TraceResult]:
     """
-    Generate multiple traces using one reproducible random seed.
+    Generate multiple execution traces.
+
+    The same random seed produces the same generated traces.
     """
+
     if number_of_traces <= 0:
         raise ValueError(
             "number_of_traces must be positive."
@@ -227,16 +387,30 @@ def generate_traces(
             "maximum_steps must be positive."
         )
 
-    random_generator = random.Random(seed)
+    if not target_label.strip():
+        raise ValueError(
+            "target_label must not be empty."
+        )
 
-    traces = []
+    random_generator = random.Random(
+        seed
+    )
 
-    for trace_id in range(number_of_traces):
+    traces: list[TraceResult] = []
+
+    for trace_id in range(
+        number_of_traces
+    ):
         trace = simulate_trace(
             model=model,
             trace_id=trace_id,
             random_generator=random_generator,
             maximum_steps=maximum_steps,
+            target_label=target_label,
+            negative_terminal_label=(
+                negative_terminal_label
+            ),
+            monitor_label=monitor_label,
         )
 
         traces.append(trace)
@@ -249,10 +423,12 @@ def save_traces_to_csv(
     output_path: Path,
 ) -> None:
     """
-    Save traces in a CSV file.
+    Save generated traces to a CSV file.
 
-    Variable-length paths are stored using the | separator.
+    Variable-length state sequences are stored using '|'
+    as the separator.
     """
+
     output_path.parent.mkdir(
         parents=True,
         exist_ok=True,
@@ -268,8 +444,8 @@ def save_traces_to_csv(
             "state_ids",
             "valuations",
             "terminal_label",
-            "reached_error",
-            "reached_candidate",
+            "reached_target",
+            "reached_monitor",
             "number_of_transitions",
         ]
 
@@ -283,10 +459,13 @@ def save_traces_to_csv(
         for trace in traces:
             writer.writerow(
                 {
-                    "trace_id": trace.trace_id,
+                    "trace_id": (
+                        trace.trace_id
+                    ),
                     "state_ids": "|".join(
                         str(state_id)
-                        for state_id in trace.state_ids
+                        for state_id
+                        in trace.state_ids
                     ),
                     "valuations": "|".join(
                         trace.valuations
@@ -294,11 +473,11 @@ def save_traces_to_csv(
                     "terminal_label": (
                         trace.terminal_label
                     ),
-                    "reached_error": int(
-                        trace.reached_error
+                    "reached_target": int(
+                        trace.reached_target
                     ),
-                    "reached_candidate": int(
-                        trace.reached_candidate
+                    "reached_monitor": int(
+                        trace.reached_monitor
                     ),
                     "number_of_transitions": (
                         trace.number_of_transitions
@@ -307,23 +486,32 @@ def save_traces_to_csv(
             )
 
 
-def compute_exact_error_probability(
+def compute_exact_target_probability(
     model,
     properties,
 ) -> float:
     """
-    Compute the exact error-reachability probability using Storm.
+    Compute the exact target-reachability probability
+    using Storm model checking.
     """
+
+    if not properties:
+        raise ValueError(
+            "No property was supplied for model checking."
+        )
+
     result = stormpy.model_checking(
         model,
         properties[0],
     )
 
-    initial_states = list(model.initial_states)
+    initial_states = list(
+        model.initial_states
+    )
 
     if len(initial_states) != 1:
         raise ValueError(
-            "Expected one initial state."
+            "Expected exactly one initial state."
         )
 
     return float(
@@ -337,38 +525,52 @@ def print_summary(
     seed: int,
     maximum_steps: int,
     output_path: Path,
+    target_label: str,
+    negative_terminal_label: str | None,
+    monitor_label: str | None,
 ) -> None:
     """
-    Print summary statistics for the generated traces.
+    Print summary statistics for generated traces.
     """
+
     number_of_traces = len(traces)
 
-    error_count = sum(
-        trace.reached_error
+    if number_of_traces == 0:
+        raise ValueError(
+            "No traces were generated."
+        )
+
+    target_count = sum(
+        trace.reached_target
         for trace in traces
     )
 
-    safe_count = sum(
-        trace.terminal_label == "safe"
-        for trace in traces
-    )
+    if negative_terminal_label is None:
+        negative_count = 0
+    else:
+        negative_count = sum(
+            trace.terminal_label
+            == negative_terminal_label
+            for trace in traces
+        )
 
     truncated_count = sum(
         trace.terminal_label == "max_steps"
         for trace in traces
     )
 
-    candidate_count = sum(
-        trace.reached_candidate
+    monitor_count = sum(
+        trace.reached_monitor
         for trace in traces
     )
 
     empirical_probability = (
-        error_count / number_of_traces
+        target_count / number_of_traces
     )
 
     absolute_error = abs(
-        empirical_probability - exact_probability
+        empirical_probability
+        - exact_probability
     )
 
     average_trace_length = (
@@ -383,48 +585,99 @@ def print_summary(
     print("Trace-generation summary")
     print("------------------------")
     print(
-        f"Number of traces: {number_of_traces}"
-    )
-    print(f"Random seed: {seed}")
-    print(
-        f"Maximum steps per trace: {maximum_steps}"
-    )
-    print(f"Error traces: {error_count}")
-    print(f"Safe traces: {safe_count}")
-    print(
-        f"Truncated traces: {truncated_count}"
+        f"Number of traces: "
+        f"{number_of_traces}"
     )
     print(
-        f"Traces visiting candidate: "
-        f"{candidate_count}"
+        f"Random seed: {seed}"
     )
+    print(
+        f"Maximum steps per trace: "
+        f"{maximum_steps}"
+    )
+    print(
+        f"Target label: "
+        f"{target_label}"
+    )
+    print(
+        f"Target traces: "
+        f"{target_count}"
+    )
+
+    if negative_terminal_label is not None:
+        print(
+            f"{negative_terminal_label} traces: "
+            f"{negative_count}"
+        )
+
+    print(
+        f"Truncated traces: "
+        f"{truncated_count}"
+    )
+
+    if monitor_label is not None:
+        print(
+            f"Traces visiting "
+            f"'{monitor_label}': "
+            f"{monitor_count}"
+        )
+
     print(
         f"Average transitions per trace: "
         f"{average_trace_length:.4f}"
     )
+
     print()
     print(
-        f"Exact Storm error probability: "
+        f"Exact Storm target probability: "
         f"{exact_probability:.6f}"
     )
     print(
-        f"Empirical error probability: "
+        f"Empirical target probability: "
         f"{empirical_probability:.6f}"
     )
     print(
         f"Absolute estimation error: "
         f"{absolute_error:.6f}"
     )
+
     print()
-    print(f"Traces saved to: {output_path}")
+    print(
+        f"Traces saved to: "
+        f"{output_path}"
+    )
 
 
 def parse_arguments() -> argparse.Namespace:
+    """
+    Parse command-line arguments.
+    """
+
     parser = argparse.ArgumentParser(
         description=(
             "Generate execution traces from a "
             "Storm-built DTMC."
         )
+    )
+
+    parser.add_argument(
+        "--model",
+        type=Path,
+        default=DEFAULT_MODEL_PATH,
+        help=(
+            "Path to the PRISM model file. "
+            "Defaults to the simple DTMC."
+        ),
+    )
+
+    parser.add_argument(
+        "--property",
+        type=Path,
+        default=DEFAULT_PROPERTY_PATH,
+        help=(
+            "Path to the property file. "
+            "Defaults to the simple DTMC property."
+        ),
     )
 
     parser.add_argument(
@@ -462,7 +715,39 @@ def parse_arguments() -> argparse.Namespace:
         type=Path,
         default=DEFAULT_OUTPUT_PATH,
         help=(
-            "CSV output path."
+            "Path for the generated CSV file."
+        ),
+    )
+
+    parser.add_argument(
+        "--target-label",
+        type=str,
+        default="error",
+        help=(
+            "Label representing the positive target "
+            "(default: error)."
+        ),
+    )
+
+    parser.add_argument(
+        "--negative-terminal-label",
+        type=str,
+        default="safe",
+        help=(
+            "Label representing the negative terminal "
+            "outcome (default: safe). "
+            "Use 'none' when no such label exists."
+        ),
+    )
+
+    parser.add_argument(
+        "--monitor-label",
+        type=str,
+        default="candidate",
+        help=(
+            "Optional label to track during traces "
+            "(default: candidate). "
+            "Use 'none' to disable."
         ),
     )
 
@@ -470,12 +755,32 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def main() -> None:
+    """
+    Load a PRISM model, generate traces, save them,
+    and compare simulation with exact model checking.
+    """
+
     arguments = parse_arguments()
 
-    _, properties, model = load_prism_model()
+    target_label = arguments.target_label.strip()
+
+    negative_terminal_label = (
+        normalize_optional_label(
+            arguments.negative_terminal_label
+        )
+    )
+
+    monitor_label = normalize_optional_label(
+        arguments.monitor_label
+    )
+
+    _, properties, model = load_prism_model(
+        model_path=arguments.model,
+        property_path=arguments.property,
+    )
 
     exact_probability = (
-        compute_exact_error_probability(
+        compute_exact_target_probability(
             model,
             properties,
         )
@@ -483,14 +788,23 @@ def main() -> None:
 
     traces = generate_traces(
         model=model,
-        number_of_traces=arguments.num_traces,
-        maximum_steps=arguments.max_steps,
+        number_of_traces=(
+            arguments.num_traces
+        ),
+        maximum_steps=(
+            arguments.max_steps
+        ),
         seed=arguments.seed,
+        target_label=target_label,
+        negative_terminal_label=(
+            negative_terminal_label
+        ),
+        monitor_label=monitor_label,
     )
 
     save_traces_to_csv(
-        traces,
-        arguments.output,
+        traces=traces,
+        output_path=arguments.output,
     )
 
     print_summary(
@@ -499,6 +813,11 @@ def main() -> None:
         seed=arguments.seed,
         maximum_steps=arguments.max_steps,
         output_path=arguments.output,
+        target_label=target_label,
+        negative_terminal_label=(
+            negative_terminal_label
+        ),
+        monitor_label=monitor_label,
     )
 
 

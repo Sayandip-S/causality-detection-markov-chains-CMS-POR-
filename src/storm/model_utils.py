@@ -6,62 +6,95 @@ import stormpy
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 DEFAULT_MODEL_PATH = (
-    PROJECT_ROOT / "models" / "prism" / "simple_dtmc.prism"
+    PROJECT_ROOT
+    / "models"
+    / "prism"
+    / "simple_dtmc.prism"
 )
 
 DEFAULT_PROPERTY_PATH = (
-    PROJECT_ROOT / "models" / "properties" / "simple_dtmc.props"
+    PROJECT_ROOT
+    / "models"
+    / "properties"
+    / "simple_dtmc.props"
 )
 
 
 def load_prism_model(
-    model_path: Path = DEFAULT_MODEL_PATH,
-    property_path: Path = DEFAULT_PROPERTY_PATH,
+    model_path: str | Path | None = None,
+    property_path: str | Path | None = None,
 ):
     """
-    Parse a PRISM program and build a Storm sparse model.
+    Load a PRISM model and construct its reachable Storm model.
 
-    The model includes state labels and PRISM state-variable valuations.
+    Parameters
+    ----------
+    model_path:
+        Path to a .prism or .pm model file.
+
+    property_path:
+        Path to a .props or .pctl property file.
+
+    Returns
+    -------
+    tuple
+        parsed PRISM program,
+        parsed properties,
+        constructed Storm model
     """
 
-    model_path = Path(model_path)
-    property_path = Path(property_path)
+    selected_model_path = (
+        Path(model_path)
+        if model_path is not None
+        else DEFAULT_MODEL_PATH
+    )
 
-    if not model_path.exists():
+    selected_property_path = (
+        Path(property_path)
+        if property_path is not None
+        else DEFAULT_PROPERTY_PATH
+    )
+
+    if not selected_model_path.exists():
         raise FileNotFoundError(
-            f"PRISM model file does not exist: {model_path}"
+            f"Model file not found: {selected_model_path}"
         )
 
-    if not property_path.exists():
+    if not selected_property_path.exists():
         raise FileNotFoundError(
-            f"Property file does not exist: {property_path}"
+            f"Property file not found: {selected_property_path}"
         )
 
-    property_text = property_path.read_text(
+    property_text = selected_property_path.read_text(
         encoding="utf-8"
     ).strip()
 
     if not property_text:
         raise ValueError(
-            f"Property file is empty: {property_path}"
+            f"Property file is empty: {selected_property_path}"
         )
 
     program = stormpy.parse_prism_program(
-        str(model_path)
+        str(selected_model_path)
     )
 
-    properties = stormpy.parse_properties_for_prism_program(
-        property_text,
-        program,
+    properties = (
+        stormpy.parse_properties_for_prism_program(
+            property_text,
+            program,
+        )
     )
 
     if not properties:
         raise ValueError(
-            "No valid Storm properties were parsed."
+            "No valid properties were parsed."
         )
 
     builder_options = stormpy.BuilderOptions(
-        [prop.raw_formula for prop in properties]
+        [
+            property_object.raw_formula
+            for property_object in properties
+        ]
     )
 
     builder_options.set_build_state_valuations()
