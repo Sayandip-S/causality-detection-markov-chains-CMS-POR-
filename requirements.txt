@@ -10,3 +10,4 @@ threadpoolctl==3.6.0
 wheel==0.47.0
 wrapt==2.2.1
 pytest
+pandas==2.3.3

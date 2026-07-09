@@ -4,9 +4,9 @@
 dtmc
 
 // number of chunks
-const int N;
+const int N=32;
 // maximum number of retransmissions
-const int MAX;
+const int MAX=2;
 
 module sender
 
@@ -109,7 +109,7 @@ module	channelK
 	k : [0..2];
 	
 	// idle
-	[aF] (k=0) -> 0.98 : (k'=1) + 0.02 : (k'=2);
+	[aF] (k=0) -> 0.70 : (k'=1) + 0.3 : (k'=2);
 	// sending
 	[aG] (k=1) -> (k'=0);
 	// lost
@@ -122,10 +122,13 @@ module	channelL
 	l : [0..2];
 	
 	// idle
-	[aA] (l=0) -> 0.99 : (l'=1) + 0.01 : (l'=2);
+	[aA] (l=0) -> 0.80 : (l'=1) + 0.2 : (l'=2);
 	// sending
 	[aB] (l=1) -> (l'=0);
 	// lost
 	[TO_Ack] (l=2) -> (l'=0);
 	
 endmodule
+
+label "target" = s=5;
+label "success" = s=0 & srep=3;
