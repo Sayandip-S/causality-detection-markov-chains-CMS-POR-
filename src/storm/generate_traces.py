@@ -519,6 +519,120 @@ def compute_exact_target_probability(
     )
 
 
+def print_class_balance(
+    target_count: int,
+    negative_count: int,
+    truncated_count: int,
+    total_count: int,
+    target_label: str,
+    negative_terminal_label: str | None,
+) -> None:
+    """
+    Print the class distribution and relevant imbalance notice.
+    """
+
+    target_rate = target_count / total_count
+    truncated_rate = truncated_count / total_count
+
+    print()
+    print("Class balance")
+    print("-------------")
+    print(
+        f"Positive {target_label} traces: "
+        f"{target_count} ({target_rate:.2%})"
+    )
+
+    if negative_terminal_label is not None:
+        negative_rate = (
+            negative_count / total_count
+        )
+        print(
+            f"Negative {negative_terminal_label} traces: "
+            f"{negative_count} ({negative_rate:.2%})"
+        )
+
+    print(
+        f"Truncated traces: "
+        f"{truncated_count} ({truncated_rate:.2%})"
+    )
+    print()
+
+    if target_count == 0:
+        print(
+            "Warning: no positive target traces were generated. "
+            "This dataset cannot train a target classifier."
+        )
+
+    elif (
+        negative_terminal_label is not None
+        and negative_count == 0
+    ):
+        print(
+            f"Warning: no negative "
+            f"{negative_terminal_label} traces were generated. "
+            "This dataset cannot train a binary classifier."
+        )
+
+    elif target_rate < 0.01:
+        print(
+            "Notice: the dataset is extremely imbalanced "
+            "with very few target traces."
+        )
+
+    elif target_rate < 0.10:
+        if negative_terminal_label == "success":
+            print(
+                "Notice: the dataset is strongly imbalanced "
+                "toward the success class."
+            )
+        elif negative_terminal_label is not None:
+            print(
+                "Notice: the dataset is strongly imbalanced "
+                f"toward the {negative_terminal_label} class."
+            )
+        else:
+            print(
+                "Notice: the dataset is strongly imbalanced "
+                "toward the non-target class."
+            )
+
+    elif target_rate > 0.99:
+        if negative_terminal_label == "success":
+            print(
+                "Notice: the dataset is extremely imbalanced "
+                "with very few success traces."
+            )
+        elif negative_terminal_label is not None:
+            print(
+                "Notice: the dataset is extremely imbalanced "
+                f"with very few {negative_terminal_label} traces."
+            )
+        else:
+            print(
+                "Notice: the dataset is extremely imbalanced "
+                "with very few non-target traces."
+            )
+
+    elif target_rate > 0.90:
+        print(
+            "Notice: the dataset is strongly imbalanced "
+            "toward the target class."
+        )
+
+    elif 0.20 <= target_rate <= 0.80:
+        if negative_terminal_label is not None:
+            class_split = (
+                f"target/{negative_terminal_label}"
+            )
+        else:
+            class_split = "target/non-target"
+
+        print(
+            "Notice: the dataset has a reasonably balanced "
+            f"{class_split} split for baseline ML training."
+        )
+
+
 def print_summary(
     traces: list[TraceResult],
     exact_probability: float,
@@ -605,8 +719,12 @@ def print_summary(
     )
 
     if negative_terminal_label is not None:
+        negative_label_heading = (
+            negative_terminal_label[:1].upper()
+            + negative_terminal_label[1:]
+        )
         print(
-            f"{negative_terminal_label} traces: "
+            f"{negative_label_heading} traces: "
             f"{negative_count}"
         )
 
@@ -645,6 +763,17 @@ def print_summary(
     print(
         f"Traces saved to: "
         f"{output_path}"
+    )
+
+    print_class_balance(
+        target_count=target_count,
+        negative_count=negative_count,
+        truncated_count=truncated_count,
+        total_count=number_of_traces,
+        target_label=target_label,
+        negative_terminal_label=(
+            negative_terminal_label
+        ),
     )
 
 
