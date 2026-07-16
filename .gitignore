@@ -16,6 +16,7 @@ data/processed/*
 # Generated results
 results/metrics/*
 results/candidate_states/*
+results/logs/*
 
 # Keep empty directories
 !data/raw/.gitkeep
