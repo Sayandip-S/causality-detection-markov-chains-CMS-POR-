@@ -170,6 +170,18 @@ python -m src.ml.create_brp_visited_state_dataset \
     --prefix-length 10
 ```
 
+Run the Logistic Regression, Decision Tree, and Random Forest baselines on the fixed `k5`, `k10`, `k20`, and `k50` datasets with:
+
+```bash
+python -m scripts.run_brp_fixed_window_baselines
+```
+
+The runner writes per-window JSON files (`k5.json`, `k10.json`, `k20.json`, and `k50.json`) and `combined_metrics.csv` under:
+
+```text
+results/metrics/brp_fixed_windows/
+```
+
 ## 6. First Dataset: Summary Prefix Features
 
 The first ML dataset used simple summary features calculated from each prefix:
