@@ -159,6 +159,17 @@ target = 1
 
 Varying the observed amount can help investigate how early the target becomes predictable. The current fractional-prefix implementation is an exploratory baseline: because it calculates the prefix length from the completed trace length, it can leak outcome-related length information. A stronger follow-up experiment should use an outcome-independent observation rule, such as a fixed number of initial transitions or a fixed protocol checkpoint.
 
+The visited-state dataset script supports two mutually exclusive observation modes. A fractional prefix uses a specified fraction of each completed trace, preserving the earlier exploratory behavior but making the observation length depend on the completed trace length. A fixed transition window observes the same number of transitions from the start of every retained trace: `--prefix-length k` selects the initial state plus the next `k` states, for `k + 1` observed state IDs. Traces with `k` or fewer transitions are excluded so that the observed window cannot contain or coincide with the terminal state.
+
+Fixed transition windows are preferred for the primary prediction experiment because their observation length does not depend on the completed trace length. For example:
+
+```bash
+python -m src.ml.create_brp_visited_state_dataset \
+    --input data/raw/brp_stress_tuned_traces_10000.csv \
+    --output data/processed/brp_stress_tuned_visited_state_dataset_k10.csv \
+    --prefix-length 10
+```
+
 ## 6. First Dataset: Summary Prefix Features
 
 The first ML dataset used simple summary features calculated from each prefix:
