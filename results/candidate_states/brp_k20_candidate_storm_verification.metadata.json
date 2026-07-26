@@ -1,0 +1,21 @@
+{
+  "model_path": "models/prism/brp/brp_stress_error_target.pm",
+  "property_path": "models/properties/brp/brp_target.pctl",
+  "candidate_path": "results/candidate_states/brp_k20_candidate_state_valuations.csv",
+  "model_state_count": 1221,
+  "transition_count": 1603,
+  "initial_state_id": 0,
+  "baseline_target_probability": 0.3416445845150787,
+  "stormpy_version": "1.13.2",
+  "top_k": 20,
+  "git_commit_sha": "81434fb98a8641f24154098272d1dcd68edf01d8",
+  "git_branch": "feat/brp-prefix-experiments",
+  "working_tree_dirty": false,
+  "python_version": "3.12.3",
+  "sklearn_version": "1.8.0",
+  "pandas_version": "2.3.3",
+  "numpy_version": "2.4.6",
+  "timestamp": "2026-07-26T19:46:22.722158+00:00",
+  "interpretation": "This verifies the exact probability of eventually reaching the target when the system is currently in the candidate state.",
+  "limitation": "This is not yet the path-conditioned probability P(target | candidate was visited earlier)."
+}

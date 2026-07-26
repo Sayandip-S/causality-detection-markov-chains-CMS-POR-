@@ -1,0 +1,23 @@
+{
+  "observation_window": 20,
+  "candidate_definition": "A visited_state_<id> feature meeting minimum support, ranked by the mean of min-max normalized positive Logistic Regression coefficient, Random Forest importance, and positive full-dataset empirical probability difference, multiplied by the support reliability weight visited_count/(visited_count+minimum_support).",
+  "minimum_support": 50,
+  "baseline_target_probability": 0.32417977990332203,
+  "retained_row_count": 9723,
+  "dataset_path": "data/processed/brp_stress_tuned_visited_state_dataset_k20.csv",
+  "model_directory": "results/models/brp_fixed_windows/k20",
+  "methodological_limitations": [
+    "Empirical candidate statistics use the complete processed dataset, including rows used to train and test the saved models.",
+    "This is exploratory candidate discovery, not unbiased performance evaluation or confirmatory causal evidence.",
+    "Logistic coefficients and Random Forest importances are associative and can be affected by correlated visited-state features.",
+    "Candidate ranking is data- and model-dependent and requires separate validation and model-checking analysis."
+  ],
+  "git_commit_sha": "81434fb98a8641f24154098272d1dcd68edf01d8",
+  "git_branch": "feat/brp-prefix-experiments",
+  "working_tree_dirty": false,
+  "python_version": "3.12.3",
+  "sklearn_version": "1.8.0",
+  "pandas_version": "2.3.3",
+  "numpy_version": "2.4.6",
+  "timestamp": "2026-07-26T19:45:09.280636+00:00"
+}
