@@ -17,6 +17,8 @@ data/processed/*
 results/metrics/*
 results/candidate_states/*
 results/logs/*
+results/models/*
+results/predictions/*
 
 # Keep empty directories
 !data/raw/.gitkeep

@@ -3,11 +3,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import platform
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import joblib
+import numpy as np
 import pandas as pd
+import sklearn
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -63,6 +68,54 @@ def sha256_file(path: Path) -> str:
             digest.update(chunk)
 
     return digest.hexdigest()
+
+
+def git_output(*arguments: str) -> str:
+    """Run a read-only Git query in the repository."""
+
+    try:
+        return subprocess.run(
+            ["git", *arguments],
+            cwd=PROJECT_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        command = " ".join(("git", *arguments))
+        raise RuntimeError(f"Could not run provenance query: {command}") from error
+
+
+def repository_relative_path(path: Path, description: str = "Path") -> str:
+    """Return a portable repository-relative path or reject an external path."""
+
+    resolved_path = path.resolve()
+
+    try:
+        relative_path = resolved_path.relative_to(PROJECT_ROOT.resolve())
+    except ValueError as error:
+        raise ValueError(
+            f"{description} must be inside repository root {PROJECT_ROOT}: "
+            f"{resolved_path}"
+        ) from error
+
+    return relative_path.as_posix()
+
+
+def reproducibility_metadata(timestamp: str | None = None) -> dict[str, Any]:
+    """Return truthful source-control and environment provenance."""
+
+    branch = git_output("branch", "--show-current")
+    return {
+        "git_commit_sha": git_output("rev-parse", "HEAD"),
+        "git_branch": branch if branch else "DETACHED_HEAD",
+        "working_tree_dirty": bool(git_output("status", "--porcelain")),
+        "python_version": platform.python_version(),
+        "sklearn_version": sklearn.__version__,
+        "pandas_version": pd.__version__,
+        "numpy_version": np.__version__,
+        "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+    }
 
 
 def select_feature_columns(
@@ -236,6 +289,8 @@ def run_experiment(
     random_seed: int = 42,
     metrics_output: Path | None = None,
     predictions_output: Path | None = None,
+    model_output_dir: Path | None = None,
+    observation_window: int | None = None,
 ) -> dict[str, Any]:
     """Train and evaluate all BRP baseline models on one dataset."""
 
@@ -246,6 +301,9 @@ def run_experiment(
 
     if not 0.0 < test_size < 1.0:
         raise ValueError("test-size must be in (0, 1).")
+
+    if observation_window is not None and observation_window <= 0:
+        raise ValueError("observation-window must be a positive integer.")
 
     dataset = pd.read_csv(dataset_path)
 
@@ -324,8 +382,14 @@ def run_experiment(
                 f"{model_slug}_target_probability"
             ] = probabilities
 
+    timestamp = datetime.now(timezone.utc).isoformat()
+    provenance = reproducibility_metadata(timestamp)
+
     results = {
-        "input_dataset_path": str(dataset_path),
+        "input_dataset_path": repository_relative_path(
+            dataset_path,
+            "Dataset path",
+        ),
         "input_dataset_sha256": sha256_file(dataset_path),
         "feature_set": feature_set,
         "feature_columns": feature_columns,
@@ -333,8 +397,50 @@ def run_experiment(
         "random_seed": random_seed,
         "model_parameters": model_parameters,
         "metrics": all_metrics,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        **provenance,
     }
+
+    if model_output_dir is not None:
+        model_output_dir = model_output_dir.resolve()
+        model_output_dir.mkdir(parents=True, exist_ok=True)
+
+        for name, model in models.items():
+            model_path = model_output_dir / f"{MODEL_SLUGS[name]}.joblib"
+            joblib.dump(model, model_path)
+            print(f"Model written to: {model_path}")
+
+        feature_schema_path = model_output_dir / "feature_columns.json"
+        feature_schema_path.write_text(
+            json.dumps(feature_columns, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+        metadata = {
+            "dataset_path": repository_relative_path(
+                dataset_path,
+                "Dataset path",
+            ),
+            "dataset_sha256": results["input_dataset_sha256"],
+            "observation_window": observation_window,
+            "feature_set": feature_set,
+            "feature_columns": feature_columns,
+            "train_test_split": {
+                "test_size": test_size,
+                "random_seed": random_seed,
+                "stratify": "target",
+            },
+            "training_row_count": len(x_train),
+            "test_row_count": len(x_test),
+            "model_parameters": model_parameters,
+            **provenance,
+        }
+        metadata_path = model_output_dir / "metadata.json"
+        metadata_path.write_text(
+            json.dumps(metadata, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        print(f"Feature schema written to: {feature_schema_path}")
+        print(f"Model metadata written to: {metadata_path}")
 
     if metrics_output is not None:
         metrics_output = metrics_output.resolve()
@@ -395,6 +501,16 @@ def main() -> None:
         type=Path,
         help="Optional output path for test-set predictions CSV.",
     )
+    parser.add_argument(
+        "--model-output-dir",
+        type=Path,
+        help="Optional directory for fitted models and reproducibility files.",
+    )
+    parser.add_argument(
+        "--observation-window",
+        type=int,
+        help="Optional fixed observation-window value recorded in metadata.",
+    )
     args = parser.parse_args()
 
     run_experiment(
@@ -404,6 +520,8 @@ def main() -> None:
         random_seed=args.random_seed,
         metrics_output=args.metrics_output,
         predictions_output=args.predictions_output,
+        model_output_dir=args.model_output_dir,
+        observation_window=args.observation_window,
     )
 
 

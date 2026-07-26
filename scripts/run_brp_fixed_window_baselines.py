@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import pandas as pd
@@ -16,6 +17,12 @@ OUTPUT_DIRECTORY = (
     / "metrics"
     / "brp_fixed_windows"
 )
+MODEL_OUTPUT_DIRECTORY = (
+    PROJECT_ROOT
+    / "results"
+    / "models"
+    / "brp_fixed_windows"
+)
 
 
 def dataset_path_for_window(window: int) -> Path:
@@ -27,10 +34,51 @@ def dataset_path_for_window(window: int) -> Path:
     )
 
 
+def combined_output_for_windows(windows: tuple[int, ...]) -> Path:
+    """Keep the canonical output exclusive to complete default runs."""
+
+    if windows == WINDOWS:
+        filename = "combined_metrics.csv"
+    else:
+        window_suffix = "_".join(f"k{window}" for window in windows)
+        filename = f"combined_metrics_{window_suffix}.csv"
+
+    return OUTPUT_DIRECTORY / filename
+
+
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Run BRP baselines for fixed observation windows."
+    )
+    parser.add_argument(
+        "--windows",
+        type=int,
+        nargs="+",
+        choices=WINDOWS,
+        default=list(WINDOWS),
+        help="Windows to train (default: 5 10 20 50).",
+    )
+    parser.add_argument(
+        "--save-models",
+        action="store_true",
+        help="Persist each selected window's fitted baseline models.",
+    )
+    parser.add_argument(
+        "--model-output-root",
+        type=Path,
+        default=MODEL_OUTPUT_DIRECTORY,
+        help="Root directory used with --save-models.",
+    )
+    args = parser.parse_args()
+    selected_windows = tuple(
+        window for window in WINDOWS if window in args.windows
+    )
+    combined_output = combined_output_for_windows(selected_windows)
+    print(f"Combined metrics output: {combined_output}")
+
     dataset_paths = {
         window: dataset_path_for_window(window)
-        for window in WINDOWS
+        for window in selected_windows
     }
     missing_datasets = [
         path
@@ -61,6 +109,12 @@ def main() -> None:
             test_size=0.2,
             random_seed=42,
             metrics_output=OUTPUT_DIRECTORY / f"k{window}.json",
+            model_output_dir=(
+                args.model_output_root / f"k{window}"
+                if args.save_models
+                else None
+            ),
+            observation_window=window,
         )
 
         for model_name, metrics in results["metrics"].items():
@@ -73,7 +127,6 @@ def main() -> None:
             )
 
     combined_metrics = pd.DataFrame(combined_rows)
-    combined_output = OUTPUT_DIRECTORY / "combined_metrics.csv"
     combined_metrics.to_csv(combined_output, index=False)
 
     print()
