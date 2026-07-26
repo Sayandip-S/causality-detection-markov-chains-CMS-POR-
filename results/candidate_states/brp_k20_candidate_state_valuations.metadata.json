@@ -1,0 +1,23 @@
+{
+  "model_path": "models/prism/brp/brp_stress_error_target.pm",
+  "property_path": "models/properties/brp/brp_target.pctl",
+  "candidate_path": "results/candidate_states/brp_k20_candidate_states.csv",
+  "model_state_count": 1221,
+  "transition_count": 1603,
+  "selected_top_k": 20,
+  "interpretation": "Each row maps a ranked Storm sparse-model state ID to the full PRISM state-variable valuation and labels attached to that state.",
+  "limitations": [
+    "Storm state IDs are internal indices for this exact parsed model, property set, builder configuration, and Storm version; they are not PRISM variable values and may change under another build.",
+    "The mapping is descriptive and does not establish that a state causes the target outcome.",
+    "Candidate scores and empirical probabilities retain the exploratory limitations documented by the candidate-extraction experiment.",
+    "Labels report only labels attached directly to the mapped state."
+  ],
+  "git_commit_sha": "81434fb98a8641f24154098272d1dcd68edf01d8",
+  "git_branch": "feat/brp-prefix-experiments",
+  "working_tree_dirty": false,
+  "python_version": "3.12.3",
+  "sklearn_version": "1.8.0",
+  "pandas_version": "2.3.3",
+  "numpy_version": "2.4.6",
+  "timestamp": "2026-07-26T19:45:53.928855+00:00"
+}
