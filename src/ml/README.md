@@ -748,5 +748,306 @@ No claim is being made yet that the ML models have identified formal causes.
    - Tuned stress final-error target
 9. Later, consider transition-count features or order-aware representations because visited-state features ignore order.
 
+---
 
+## BRP Fixed-Window Candidate-State Experiment — 16 July 2026
 
+### 1. Goal
+
+This experiment connects the full analysis pipeline:
+
+```text
+PRISM/Storm model checking
+    → trace generation
+    → fixed-window ML prediction
+    → candidate-state ranking
+    → mapping Storm IDs to PRISM valuations
+    → exact state-based Storm verification
+```
+
+Machine learning is used to prioritize preliminary candidate predictor states from sampled trace prefixes. Storm then performs the exact state-based check on those candidates. The ML score is therefore a discovery heuristic, while the Storm result is the model-derived probability of eventually reaching the target from a specified current state.
+
+### 2. Model configuration
+
+The experiment uses the BRP benchmark with the final sender-error target:
+
+```prism
+label "target" = s=5;
+```
+
+The actual tuned model configuration is:
+
+| Item | Value |
+| --- | --- |
+| Number of chunks, \(N\) | 32 |
+| Maximum retransmissions, \(\mathit{MAX}\) | 2 |
+| Frame/data channel delivery probability | 0.85 |
+| Frame/data channel loss probability | 0.15 |
+| Acknowledgement channel delivery probability | 0.90 |
+| Acknowledgement channel loss probability | 0.10 |
+| Reachable Storm states | 1,221 |
+| Storm transitions | 1,603 |
+| Exact initial target probability | 0.341644584515 |
+
+This is a tuned, higher-loss experimental BRP configuration rather than the original benchmark parameterization.
+
+### 3. Raw trace dataset
+
+The raw dataset contains 10,000 traces generated from the tuned model:
+
+| Outcome | Traces | Fraction |
+| --- | ---: | ---: |
+| Target | 3,429 | 0.3429 |
+| Success | 6,571 | 0.6571 |
+| Total | 10,000 | 1.0000 |
+
+The empirical target probability is `0.3429`, compared with the exact Storm probability `0.341644584515`.
+
+Trace lengths below are numbers of transitions:
+
+| Outcome | Minimum | Median | Mean | Maximum |
+| --- | ---: | ---: | ---: | ---: |
+| Target | 8 | 106 | 108.5733 | 250 |
+| Success | 194 | 216 | 217.2902 | 254 |
+
+Target traces can terminate much earlier than successful protocol executions. This difference is important because an observation rule based on completed trace length can indirectly expose information about the eventual outcome.
+
+### 4. Why fixed observation windows were introduced
+
+The earlier fractional-prefix experiment observed a fraction of each completed trace. Completed trace length is not available at prediction time, and the raw data shows substantially different target and success length distributions. Consequently, a fractional prefix length can reveal outcome-related length information even when the terminal state itself is absent.
+
+Fixed windows instead observe exactly \(k\) transitions from the start of each trace. A trace that terminates at or before \(k\) is excluded, ensuring that the observed window neither contains nor coincides with its terminal target or success state.
+
+| Window | Retained traces | Excluded target | Excluded success | Retained positive rate | Visited-state features |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 5 | 10,000 | 0 | 0 | 0.3429 | 12 |
+| 10 | 9,956 | 44 | 0 | 0.3400 | 39 |
+| 20 | 9,723 | 277 | 0 | 0.3242 | 94 |
+| 50 | 9,177 | 823 | 0 | 0.2840 | 251 |
+
+Each retained row contains \(k+1\) observed state IDs because the initial state is included alongside the \(k\) transitions.
+
+### 5. Fixed-window baseline results
+
+All models use only ordered `visited_state_*` indicator columns. The split is stratified with `test_size=0.2` and `random_seed=42`.
+
+| Window | Model | Accuracy | Precision | Recall | F1 | ROC-AUC | FN | TP | Features |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 5 | Logistic Regression | 0.6305 | 0.4120 | 0.1808 | 0.2513 | 0.5245 | 562 | 124 | 12 |
+| 5 | Decision Tree | 0.6305 | 0.4120 | 0.1808 | 0.2513 | 0.5245 | 562 | 124 | 12 |
+| 5 | Random Forest | 0.6305 | 0.4120 | 0.1808 | 0.2513 | 0.5245 | 562 | 124 | 12 |
+| 10 | Logistic Regression | 0.5979 | 0.3869 | 0.3131 | 0.3461 | 0.5276 | 465 | 212 | 39 |
+| 10 | Decision Tree | 0.5979 | 0.3869 | 0.3131 | 0.3461 | 0.5277 | 465 | 212 | 39 |
+| 10 | Random Forest | 0.5979 | 0.3869 | 0.3131 | 0.3461 | 0.5277 | 465 | 212 | 39 |
+| 20 | Logistic Regression | 0.6314 | 0.3930 | 0.2504 | 0.3059 | 0.5397 | 473 | 158 | 94 |
+| 20 | Decision Tree | 0.6540 | 0.4019 | 0.1363 | 0.2036 | 0.5147 | 545 | 86 | 94 |
+| 20 | Random Forest | 0.6211 | 0.3848 | 0.2805 | 0.3245 | 0.5283 | 454 | 177 | 94 |
+| 50 | Logistic Regression | 0.5969 | 0.3166 | 0.3628 | 0.3381 | 0.5383 | 332 | 189 | 251 |
+| 50 | Decision Tree | 0.6716 | 0.3277 | 0.1497 | 0.2055 | 0.5173 | 443 | 78 | 251 |
+| 50 | Random Forest | 0.6247 | 0.3213 | 0.2898 | 0.3047 | 0.5246 | 370 | 151 | 251 |
+
+ROC-AUC is approximately 0.52–0.54, so early prediction from visited-state indicators alone is weak. Accuracy is also influenced by class imbalance and should not be read as strong discrimination. The earlier high fractional-prefix scores should therefore be interpreted cautiously because their observation length depended on completed trace length. This is a useful methodological result rather than a failed experiment: the fixed-window design exposes how much weaker the genuinely early signal is.
+
+### 6. Selected k=20 candidate-state analysis
+
+The k=20 window was selected for preliminary candidate extraction because Logistic Regression achieved the strongest ROC-AUC (`0.5397`), while k=50 was close (`0.5383`). The k=5 and k=10 datasets contained only 3 and 11 distinct visited-state patterns, respectively. In contrast, k=50 excluded 823 target traces, substantially more than the 277 excluded at k=20.
+
+Candidate ranking combines three signals:
+
+1. **Positive Logistic Regression coefficient:** direction and strength toward target/error prediction.
+2. **Random Forest feature importance:** predictive usefulness, without indicating direction.
+3. **Positive empirical probability difference:** \(P(\text{target}\mid\text{state visited in the first 20 transitions}) - P(\text{target}\mid\text{state not visited in the first 20 transitions})\).
+
+The three non-negative signals are min-max normalized and averaged. The result is multiplied by the support-reliability weight
+
+```text
+visited_count / (visited_count + minimum_support)
+```
+
+with `minimum_support=50`. The combined score is a ranking heuristic, not an error probability. Empirical statistics use the complete retained k=20 dataset, including rows used during model training and testing, so candidate discovery is exploratory rather than an unbiased performance evaluation.
+
+### 7. Top candidate states
+
+| ML rank | Storm state ID | Combined score | LR coefficient | RF importance | Visits | P(target \| visited) | P(target \| not visited) | Empirical difference |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 89 | 0.6041 | 0.1629 | 0.068688 | 176 | 0.5398 | 0.3202 | 0.2196 |
+| 2 | 82 | 0.5675 | 0.1629 | 0.059003 | 176 | 0.5398 | 0.3202 | 0.2196 |
+| 3 | 101 | 0.5539 | 0.4980 | 0.053027 | 83 | 0.5181 | 0.3225 | 0.1956 |
+| 4 | 69 | 0.3401 | 0.3113 | 0.011687 | 250 | 0.4160 | 0.3218 | 0.0942 |
+| 5 | 83 | 0.3226 | 0.3534 | 0.007011 | 217 | 0.4055 | 0.3223 | 0.0832 |
+| 6 | 102 | 0.2659 | -0.0571 | 0.022411 | 111 | 0.5045 | 0.3221 | 0.1824 |
+| 7 | 99 | 0.2509 | 0.3246 | 0.017147 | 85 | 0.3882 | 0.3236 | 0.0646 |
+| 8 | 95 | 0.2509 | -0.0571 | 0.017931 | 111 | 0.5045 | 0.3221 | 0.1824 |
+| 9 | 93 | 0.2110 | 0.2334 | 0.008462 | 485 | 0.3464 | 0.3230 | 0.0234 |
+| 10 | 44 | 0.2012 | 0.3306 | 0.008346 | 166 | 0.3012 | 0.3246 | -0.0234 |
+
+The ranking can retain a candidate with one negative component because the other components may still provide positive evidence. For example, state 102 has a negative Logistic Regression coefficient but positive Random Forest and empirical signals.
+
+### 8. Storm ID to PRISM valuation mapping
+
+Storm internal state IDs are indices in the constructed sparse model; they are not values of any PRISM variable. Trace generation, candidate mapping, and exact verification all use the same `load_prism_model` construction path, including state valuations and labels.
+
+| Rank | State ID | s | i | nrtr | r | rrep | k | l |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 89 | 3 | 3 | 1 | 4 | 2 | 0 | 0 |
+| 2 | 82 | 2 | 3 | 1 | 4 | 2 | 2 | 0 |
+| 3 | 101 | 2 | 3 | 1 | 4 | 2 | 0 | 2 |
+| 4 | 69 | 3 | 2 | 1 | 4 | 2 | 0 | 0 |
+| 5 | 83 | 2 | 2 | 2 | 2 | 2 | 0 | 0 |
+| 6 | 102 | 2 | 3 | 2 | 2 | 2 | 0 | 0 |
+| 7 | 99 | 2 | 3 | 1 | 4 | 2 | 2 | 0 |
+| 8 | 95 | 2 | 3 | 2 | 4 | 2 | 1 | 0 |
+| 9 | 93 | 3 | 3 | 0 | 4 | 2 | 0 | 0 |
+| 10 | 44 | 2 | 2 | 1 | 4 | 1 | 2 | 0 |
+
+In the PRISM model, `s` is the sender control state, `i` is the current chunk index, and `nrtr` is the retransmission count. The variables `r` and `rrep` are the receiver control and report states. Variables `k` and `l` are the frame/data and acknowledgement channel states. Their numeric meanings are documented by comments in the model.
+
+No special labels are directly attached to these intermediate candidate states, which is expected: the model labels identify the final `target` and `success` conditions rather than every intermediate protocol state.
+
+### 9. Exact Storm state-based verification
+
+The exact baseline is:
+
+```text
+P(target from initial state 0) = 0.341644584515
+```
+
+The verification output is sorted by exact probability difference, while retaining the original ML rank:
+
+| ML rank | State ID | Valuation summary | Empirical difference | Exact P(target) from state | Exact difference | Raises probability |
+| ---: | ---: | --- | ---: | ---: | ---: | :---: |
+| 4 | 69 | `s=3, i=2, nrtr=1, r=4, rrep=2, k=0, l=0` | 0.0942 | 0.483027 | 0.141382 | Yes |
+| 1 | 89 | `s=3, i=3, nrtr=1, r=4, rrep=2, k=0, l=0` | 0.2196 | 0.476229 | 0.134585 | Yes |
+| 2 | 82 | `s=2, i=3, nrtr=1, r=4, rrep=2, k=2, l=0` | 0.2196 | 0.476229 | 0.134585 | Yes |
+| 3 | 101 | `s=2, i=3, nrtr=1, r=4, rrep=2, k=0, l=2` | 0.1956 | 0.476229 | 0.134585 | Yes |
+| 5 | 83 | `s=2, i=2, nrtr=2, r=2, rrep=2, k=0, l=0` | 0.0832 | 0.391796 | 0.050152 | Yes |
+| 16 | 56 | `s=2, i=2, nrtr=1, r=3, rrep=2, k=0, l=0` | 0.0165 | 0.340099 | -0.001546 | No |
+| 20 | 22 | `s=1, i=2, nrtr=0, r=4, rrep=1, k=0, l=0` | -0.0161 | 0.332988 | -0.008656 | No |
+| 15 | 100 | `s=2, i=3, nrtr=1, r=4, rrep=2, k=0, l=1` | -0.0372 | 0.315332 | -0.026312 | No |
+
+Seventeen of the top 20 candidates raise the exact future target probability above the initial-state baseline. States 69, 44, 51, 61, and 63 all have an exact target probability of approximately `0.483027`. States 89, 82, 101, and 99 all have an exact probability of approximately `0.476229`.
+
+The ML and exact Storm rankings are not identical. ML learns from sampled prefixes containing correlated state indicators, whereas Storm evaluates future behavior from one current state in the mathematical model. Several distinct sparse-model states can also have probability-equivalent future behavior. Storm computes the model probability from the current state exactly, subject to the numerical precision of the implementation.
+
+### 10. Interpretation and limitation
+
+The current exact state-based verification computes:
+
+```text
+P(eventually target | currently in candidate state)
+```
+
+It does **not** yet compute:
+
+```text
+P(eventually target | candidate was visited earlier)
+```
+
+The stricter historical or path-conditioned quantity requires a monitored/product model with a persistent `seen_candidate` condition, or an equivalent conditional path construction. The present results identify preliminary candidate predictor states and probability-raising candidates; they do not establish that these states are formal causes.
+
+### 11. Reproduction commands
+
+Generate the k=20 fixed-window dataset:
+
+```bash
+python -m src.ml.create_brp_visited_state_dataset \
+    --input data/raw/brp_stress_tuned_traces_10000.csv \
+    --output data/processed/brp_stress_tuned_visited_state_dataset_k20.csv \
+    --prefix-length 20
+```
+
+Run all fixed-window baselines:
+
+```bash
+python -m scripts.run_brp_fixed_window_baselines
+```
+
+Train and save the k=20 models and schema:
+
+```bash
+python -m src.ml.train_brp_baselines \
+    --dataset data/processed/brp_stress_tuned_visited_state_dataset_k20.csv \
+    --feature-set visited_states_only \
+    --test-size 0.2 \
+    --random-seed 42 \
+    --metrics-output results/metrics/brp_fixed_windows/k20.json \
+    --model-output-dir results/models/brp_fixed_windows/k20 \
+    --observation-window 20
+```
+
+Extract ranked candidates:
+
+```bash
+python -m scripts.extract_brp_candidate_states \
+    --dataset data/processed/brp_stress_tuned_visited_state_dataset_k20.csv \
+    --model-dir results/models/brp_fixed_windows/k20 \
+    --output results/candidate_states/brp_k20_candidate_states.csv \
+    --top-k 20 \
+    --minimum-support 50
+```
+
+Map Storm IDs to PRISM valuations:
+
+```bash
+python -m scripts.map_brp_candidate_states \
+    --model models/prism/brp/brp_stress_error_target.pm \
+    --property models/properties/brp/brp_target.pctl \
+    --candidates results/candidate_states/brp_k20_candidate_states.csv \
+    --output results/candidate_states/brp_k20_candidate_state_valuations.csv \
+    --top-k 20
+```
+
+Verify candidates with Storm:
+
+```bash
+python -m scripts.verify_brp_candidate_states \
+    --model models/prism/brp/brp_stress_error_target.pm \
+    --property models/properties/brp/brp_target.pctl \
+    --candidates results/candidate_states/brp_k20_candidate_state_valuations.csv \
+    --output results/candidate_states/brp_k20_candidate_storm_verification.csv \
+    --top-k 20
+```
+
+### 12. Artifact links
+
+The compact CSV/JSON experiment records and feature schema below should be
+deliberately committed for reproducibility after regeneration from a clean
+source commit. Raw and processed datasets, serialized joblib models, logs,
+predictions, caches, and other bulky generated files should remain untracked.
+
+- [Combined fixed-window metrics](../../results/metrics/brp_fixed_windows/combined_metrics.csv)
+- [k=5 metrics](../../results/metrics/brp_fixed_windows/k5.json)
+- [k=10 metrics](../../results/metrics/brp_fixed_windows/k10.json)
+- [k=20 metrics](../../results/metrics/brp_fixed_windows/k20.json)
+- [k=50 metrics](../../results/metrics/brp_fixed_windows/k50.json)
+- [k=20 model metadata](../../results/models/brp_fixed_windows/k20/metadata.json)
+- [k=20 feature schema](../../results/models/brp_fixed_windows/k20/feature_columns.json)
+- [Ranked k=20 candidates](../../results/candidate_states/brp_k20_candidate_states.csv)
+- [Candidate-ranking metadata](../../results/candidate_states/brp_k20_candidate_states.metadata.json)
+- [Candidate PRISM valuations](../../results/candidate_states/brp_k20_candidate_state_valuations.csv)
+- [Candidate-mapping metadata](../../results/candidate_states/brp_k20_candidate_state_valuations.metadata.json)
+- [Exact Storm verification](../../results/candidate_states/brp_k20_candidate_storm_verification.csv)
+- [Exact-verification metadata](../../results/candidate_states/brp_k20_candidate_storm_verification.metadata.json)
+- [Tuned BRP PRISM model](../../models/prism/brp/brp_stress_error_target.pm)
+- [Target property](../../models/properties/brp/brp_target.pctl)
+
+### 13. Current status and next steps
+
+Completed:
+
+- [x] Tuned BRP target configuration
+- [x] Exact and empirical target probability comparison
+- [x] Fixed-window datasets
+- [x] Reproducible baseline metrics
+- [x] Saved k=20 models and feature schema
+- [x] Candidate-state extraction
+- [x] Storm-ID-to-valuation mapping
+- [x] Exact state-based Storm verification
+
+Pending:
+
+- [ ] Independently generated seed-123 validation dataset
+- [ ] Candidate-ranking stability across seeds
+- [ ] Richer fixed-window features
+- [ ] Strict path-conditioned probability raising
+- [ ] Final experiment cleanup and documentation
