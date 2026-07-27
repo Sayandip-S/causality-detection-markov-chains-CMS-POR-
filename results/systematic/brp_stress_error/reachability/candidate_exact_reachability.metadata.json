@@ -1,0 +1,52 @@
+{
+  "model_path": "models/prism/brp/brp_stress_error_target.pm",
+  "property_path": "models/properties/brp/brp_target.pctl",
+  "candidate_path": "results/candidate_states/brp_k20_candidate_states.csv",
+  "model_state_count": 1221,
+  "transition_count": 1603,
+  "initial_state_id": 0,
+  "target_baseline": 0.3416445845150787,
+  "stormpy_version": "1.13.2",
+  "selected_top_k": 20,
+  "observation_window_transitions": 20,
+  "empirical_population_rows": 9723,
+  "empirical_population_condition": "number_of_transitions > 20",
+  "empirical_observation_horizon": "first 20 transitions",
+  "exact_reachability_horizon": "unbounded",
+  "quantities_directly_comparable": false,
+  "calculation_definitions": {
+    "empirical_support_fraction": "Fraction of retained k20 traces in which the candidate appears within the initial state plus first 20 transitions. The retained population contains only traces with more than 20 transitions.",
+    "exact_candidate_reachability": "Unbounded, unconditional Storm probability P_initial(F candidate).",
+    "support_reachability_absolute_gap": "Absolute descriptive difference between the bounded, survival-conditioned empirical support and unbounded, unconditional exact reachability.",
+    "support_reachability_relative_gap": "The absolute descriptive gap divided by exact candidate reachability, when the denominator is nonzero.",
+    "target_probability_from_candidate": "P_candidate(F target): Storm model-checking probability of eventually reaching the target from the candidate state.",
+    "probability_difference_from_baseline": "target_probability_from_candidate - target_baseline.",
+    "probability_ratio_to_baseline": "target_probability_from_candidate / target_baseline; undefined when the baseline is zero.",
+    "raises_probability_from_state": "Whether target_probability_from_candidate is strictly greater than target_baseline.",
+    "risk_weighted_coverage": "exact_candidate_reachability * target_probability_from_candidate. This is a descriptive heuristic, not a formal causality measure."
+  },
+  "execution": {
+    "started_at": "2026-07-27T09:12:53.919017+00:00",
+    "completed_at": "2026-07-27T09:12:54.109214+00:00",
+    "duration_seconds": 0.1902000219997717
+  },
+  "methodological_limitations": [
+    "The empirical and exact quantities correspond to different events: empirical support is bounded and survival-conditioned, whereas exact candidate reachability is unbounded and unconditional.",
+    "The support-reachability gap combines sampling variation, finite observation horizon, and population conditioning.",
+    "The support-reachability gap must not be interpreted as pure Monte Carlo estimation error.",
+    "A matched comparison requires either full-trace empirical visitation over all raw traces versus unbounded exact reachability, or exact bounded and survival-conditioned reachability matching the k20 dataset.",
+    "risk_weighted_coverage is a descriptive heuristic and is not a formal causality measure.",
+    "P_candidate(F target) is state-based and is not the historical conditional probability P(target | candidate was visited).",
+    "Empirical support comes from finite retained traces, while exact reachability comes from the specified PRISM model; their difference mixes sampling and model-data mismatch.",
+    "Probability raising relative to the initial-state baseline does not by itself establish causality.",
+    "Storm sparse-model state IDs depend on this model, property set, builder configuration, and Storm version."
+  ],
+  "git_commit_sha": "a1778ef1d88ee4cc9fbb21876216885029048cf4",
+  "git_branch": "feat/brp-systematic-evaluation",
+  "working_tree_dirty": true,
+  "python_version": "3.12.3",
+  "sklearn_version": "1.8.0",
+  "pandas_version": "2.3.3",
+  "numpy_version": "2.4.6",
+  "timestamp": "2026-07-27T09:12:54.109214+00:00"
+}
