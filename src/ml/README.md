@@ -997,16 +997,37 @@ python -m scripts.map_brp_candidate_states \
     --top-k 20
 ```
 
-Verify candidates with Storm:
+Verify both exact initial-to-candidate reachability and exact
+candidate-to-target reachability with Storm:
 
 ```bash
 python -m scripts.verify_brp_candidate_states \
     --model models/prism/brp/brp_stress_error_target.pm \
     --property models/properties/brp/brp_target.pctl \
-    --candidates results/candidate_states/brp_k20_candidate_state_valuations.csv \
-    --output results/candidate_states/brp_k20_candidate_storm_verification.csv \
+    --candidates results/candidate_states/brp_k20_candidate_states.csv \
+    --output results/systematic/brp_stress_error/reachability/candidate_exact_reachability.csv \
     --top-k 20
 ```
+
+The output also reports `risk_weighted_coverage`, defined as exact candidate
+reachability multiplied by exact target probability from the candidate. This
+is a descriptive heuristic, not a formal causality measure.
+
+The empirical and exact reachability columns describe different events.
+`empirical_support_fraction` is the fraction of the 9,723 retained k20 traces
+in which the candidate appears within the initial state plus the first 20
+transitions. This empirical population is conditioned on the trace having
+more than 20 transitions. In contrast, `exact_candidate_reachability` is the
+unbounded, unconditional Storm probability `P_initial(F candidate)` over all
+model paths.
+
+Accordingly, `support_reachability_absolute_gap` and
+`support_reachability_relative_gap` are descriptive gaps, not Monte Carlo
+estimation errors. They combine sampling variation, the finite empirical
+observation horizon, and population conditioning. A matched comparison would
+require either full-trace empirical visitation over all raw traces versus
+unbounded exact reachability, or an exact bounded and survival-conditioned
+reachability calculation matching the k20 dataset.
 
 ### 12. Artifact links
 
@@ -1026,8 +1047,8 @@ predictions, caches, and other bulky generated files should remain untracked.
 - [Candidate-ranking metadata](../../results/candidate_states/brp_k20_candidate_states.metadata.json)
 - [Candidate PRISM valuations](../../results/candidate_states/brp_k20_candidate_state_valuations.csv)
 - [Candidate-mapping metadata](../../results/candidate_states/brp_k20_candidate_state_valuations.metadata.json)
-- [Exact Storm verification](../../results/candidate_states/brp_k20_candidate_storm_verification.csv)
-- [Exact-verification metadata](../../results/candidate_states/brp_k20_candidate_storm_verification.metadata.json)
+- [Exact reachability verification](../../results/systematic/brp_stress_error/reachability/candidate_exact_reachability.csv)
+- [Exact-reachability metadata](../../results/systematic/brp_stress_error/reachability/candidate_exact_reachability.metadata.json)
 - [Tuned BRP PRISM model](../../models/prism/brp/brp_stress_error_target.pm)
 - [Target property](../../models/properties/brp/brp_target.pctl)
 
