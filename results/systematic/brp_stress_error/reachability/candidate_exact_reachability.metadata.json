@@ -1,4 +1,9 @@
 {
+  "source_git_commit_sha": "d690ad75936806bd974374258cd4a36ca5b31be9",
+  "source_git_branch": "feat/brp-systematic-evaluation",
+  "source_working_tree_dirty": false,
+  "provenance_capture_timestamp": "2026-08-03T09:14:47.544258+00:00",
+  "output_generation_timestamp": "2026-08-03T09:14:47.707007+00:00",
   "model_path": "models/prism/brp/brp_stress_error_target.pm",
   "property_path": "models/properties/brp/brp_target.pctl",
   "candidate_path": "results/candidate_states/brp_k20_candidate_states.csv",
@@ -26,9 +31,9 @@
     "risk_weighted_coverage": "exact_candidate_reachability * target_probability_from_candidate. This is a descriptive heuristic, not a formal causality measure."
   },
   "execution": {
-    "started_at": "2026-07-27T09:12:53.919017+00:00",
-    "completed_at": "2026-07-27T09:12:54.109214+00:00",
-    "duration_seconds": 0.1902000219997717
+    "started_at": "2026-08-03T09:14:47.544272+00:00",
+    "completed_at": "2026-08-03T09:14:47.707007+00:00",
+    "duration_seconds": 0.1627364519990806
   },
   "methodological_limitations": [
     "The empirical and exact quantities correspond to different events: empirical support is bounded and survival-conditioned, whereas exact candidate reachability is unbounded and unconditional.",
@@ -41,12 +46,12 @@
     "Probability raising relative to the initial-state baseline does not by itself establish causality.",
     "Storm sparse-model state IDs depend on this model, property set, builder configuration, and Storm version."
   ],
-  "git_commit_sha": "a1778ef1d88ee4cc9fbb21876216885029048cf4",
+  "git_commit_sha": "d690ad75936806bd974374258cd4a36ca5b31be9",
   "git_branch": "feat/brp-systematic-evaluation",
-  "working_tree_dirty": true,
+  "working_tree_dirty": false,
   "python_version": "3.12.3",
   "sklearn_version": "1.8.0",
   "pandas_version": "2.3.3",
   "numpy_version": "2.4.6",
-  "timestamp": "2026-07-27T09:12:54.109214+00:00"
+  "timestamp": "2026-08-03T09:14:47.707007+00:00"
 }

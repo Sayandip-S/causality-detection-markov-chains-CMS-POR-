@@ -1,0 +1,89 @@
+{
+  "source_git_commit_sha": "d690ad75936806bd974374258cd4a36ca5b31be9",
+  "source_git_branch": "feat/brp-systematic-evaluation",
+  "source_working_tree_dirty": false,
+  "provenance_capture_timestamp": "2026-08-03T09:14:52.495179+00:00",
+  "output_generation_timestamp": "2026-08-03T09:15:00.099928+00:00",
+  "raw_dataset_path": "data/raw/brp_stress_tuned_traces_10000.csv",
+  "raw_dataset_sha256": "1bdda7017cca93c71adf240a09cb8197f7b03bf7acd7a9ba7ea66f5d0e973aa6",
+  "cohort_rule": "number_of_transitions > 50",
+  "minimum_required_transitions": 50,
+  "raw_row_count": 10000,
+  "retained_row_count": 9177,
+  "excluded_row_count": 823,
+  "retained_target_count": 2606,
+  "retained_success_count": 6571,
+  "retained_positive_rate": 0.2839707965566089,
+  "excluded_target_count": 823,
+  "excluded_success_count": 0,
+  "ordered_trace_id_sha256": "c282877ed9e308e57eaa4c7801d4393b5caa502ce6b37ee5badb609e57cfd72f",
+  "target_column_sha256": "4c416c2105d4f84f4e01e309f3b71f1120fd802d1b84561d0579c54c5dc0533d",
+  "train_test_membership_sha256": "cd0e3798df4037c7baf71babbc51ff0c5651a84dd93529df17093d7063a0fc9f",
+  "ordered_hash_encoding": "UTF-8 newline-delimited scalar values in dataset row order",
+  "windows": [
+    {
+      "k": 5,
+      "output_path": "data/processed/brp_stress_common50_visited_state_dataset_k5.csv",
+      "output_sha256": "5e8446b0b83cba89d5d5a9a2e6f5503ff145155b23950da4159869957613183e",
+      "row_count": 9177,
+      "feature_count": 12,
+      "class_counts": {
+        "target": 2606,
+        "success": 6571
+      },
+      "prefix_length": 6,
+      "terminal_leakage_count": 0,
+      "ordered_trace_id_sha256": "c282877ed9e308e57eaa4c7801d4393b5caa502ce6b37ee5badb609e57cfd72f",
+      "target_column_sha256": "4c416c2105d4f84f4e01e309f3b71f1120fd802d1b84561d0579c54c5dc0533d",
+      "train_test_membership_sha256": "cd0e3798df4037c7baf71babbc51ff0c5651a84dd93529df17093d7063a0fc9f"
+    },
+    {
+      "k": 10,
+      "output_path": "data/processed/brp_stress_common50_visited_state_dataset_k10.csv",
+      "output_sha256": "8a31012e8be8853b8f530050615e65284098e4c1b7c6b1ad89dd8a4d3a9632e4",
+      "row_count": 9177,
+      "feature_count": 37,
+      "class_counts": {
+        "target": 2606,
+        "success": 6571
+      },
+      "prefix_length": 11,
+      "terminal_leakage_count": 0,
+      "ordered_trace_id_sha256": "c282877ed9e308e57eaa4c7801d4393b5caa502ce6b37ee5badb609e57cfd72f",
+      "target_column_sha256": "4c416c2105d4f84f4e01e309f3b71f1120fd802d1b84561d0579c54c5dc0533d",
+      "train_test_membership_sha256": "cd0e3798df4037c7baf71babbc51ff0c5651a84dd93529df17093d7063a0fc9f"
+    },
+    {
+      "k": 20,
+      "output_path": "data/processed/brp_stress_common50_visited_state_dataset_k20.csv",
+      "output_sha256": "564edd1b30854fb18d1846da840ed15ac96523c722ac826499f4c33b673b24d9",
+      "row_count": 9177,
+      "feature_count": 88,
+      "class_counts": {
+        "target": 2606,
+        "success": 6571
+      },
+      "prefix_length": 21,
+      "terminal_leakage_count": 0,
+      "ordered_trace_id_sha256": "c282877ed9e308e57eaa4c7801d4393b5caa502ce6b37ee5badb609e57cfd72f",
+      "target_column_sha256": "4c416c2105d4f84f4e01e309f3b71f1120fd802d1b84561d0579c54c5dc0533d",
+      "train_test_membership_sha256": "cd0e3798df4037c7baf71babbc51ff0c5651a84dd93529df17093d7063a0fc9f"
+    },
+    {
+      "k": 50,
+      "output_path": "data/processed/brp_stress_common50_visited_state_dataset_k50.csv",
+      "output_sha256": "1399646b8e3ff9dfca4a41f2e2d2dfa63ce74f2d7d2096916b0686928550042c",
+      "row_count": 9177,
+      "feature_count": 251,
+      "class_counts": {
+        "target": 2606,
+        "success": 6571
+      },
+      "prefix_length": 51,
+      "terminal_leakage_count": 0,
+      "ordered_trace_id_sha256": "c282877ed9e308e57eaa4c7801d4393b5caa502ce6b37ee5badb609e57cfd72f",
+      "target_column_sha256": "4c416c2105d4f84f4e01e309f3b71f1120fd802d1b84561d0579c54c5dc0533d",
+      "train_test_membership_sha256": "cd0e3798df4037c7baf71babbc51ff0c5651a84dd93529df17093d7063a0fc9f"
+    }
+  ]
+}

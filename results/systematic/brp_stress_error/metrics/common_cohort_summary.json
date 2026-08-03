@@ -1,0 +1,81 @@
+{
+  "source_git_commit_sha": "d690ad75936806bd974374258cd4a36ca5b31be9",
+  "source_git_branch": "feat/brp-systematic-evaluation",
+  "source_working_tree_dirty": false,
+  "provenance_capture_timestamp": "2026-08-03T09:14:52.495179+00:00",
+  "output_generation_timestamp": "2026-08-03T09:15:15.806442+00:00",
+  "git_commit_sha": "d690ad75936806bd974374258cd4a36ca5b31be9",
+  "git_branch": "feat/brp-systematic-evaluation",
+  "working_tree_dirty": false,
+  "python_version": "3.12.3",
+  "sklearn_version": "1.8.0",
+  "pandas_version": "2.3.3",
+  "numpy_version": "2.4.6",
+  "timestamp": "2026-08-03T09:15:15.806442+00:00",
+  "input_datasets": [
+    {
+      "observation_window": 5,
+      "path": "data/processed/brp_stress_common50_visited_state_dataset_k5.csv",
+      "sha256": "5e8446b0b83cba89d5d5a9a2e6f5503ff145155b23950da4159869957613183e"
+    },
+    {
+      "observation_window": 10,
+      "path": "data/processed/brp_stress_common50_visited_state_dataset_k10.csv",
+      "sha256": "8a31012e8be8853b8f530050615e65284098e4c1b7c6b1ad89dd8a4d3a9632e4"
+    },
+    {
+      "observation_window": 20,
+      "path": "data/processed/brp_stress_common50_visited_state_dataset_k20.csv",
+      "sha256": "564edd1b30854fb18d1846da840ed15ac96523c722ac826499f4c33b673b24d9"
+    },
+    {
+      "observation_window": 50,
+      "path": "data/processed/brp_stress_common50_visited_state_dataset_k50.csv",
+      "sha256": "1399646b8e3ff9dfca4a41f2e2d2dfa63ce74f2d7d2096916b0686928550042c"
+    }
+  ],
+  "common_cohort_manifest": {
+    "path": "results/systematic/brp_stress_error/metrics/common_cohort_manifest.json",
+    "sha256": "cb5a207ed65b00cf116bfdba4b5a453786244624f20495d87a4e4fe465abac40"
+  },
+  "cohort_definition": {
+    "rule": "number_of_transitions > 50",
+    "row_count": 9177,
+    "target_count": 2606,
+    "success_count": 6571,
+    "positive_rate": 0.2839707965566089
+  },
+  "split_configuration": {
+    "test_size": 0.2,
+    "random_state": 42,
+    "stratify": "target",
+    "generated_once_from": "common-cohort k5 trace_id and target columns",
+    "train_rows": 7341,
+    "test_rows": 1836,
+    "train_target_count": 2085,
+    "test_target_count": 521,
+    "no_trace_id_overlap": true
+  },
+  "split_trace_id_hashes": {
+    "train": "59c7b8869b0aab341fb7695b01157bbc731c8047ee271abc2e4105312e2122aa",
+    "test": "80061fa2fc440c6a1b63de1014115d9c54823b174baabd3a73ff9d2051b31d42"
+  },
+  "per_window_feature_counts": {
+    "k5": 12,
+    "k10": 37,
+    "k20": 88,
+    "k50": 251
+  },
+  "operational_metrics": {
+    "path": "results/metrics/brp_fixed_windows/combined_metrics.csv",
+    "sha256": "e505e80e3e256e2260e42f4e410705dbf79d0f2dd3506211b153a9db39100508"
+  },
+  "total_runtime_seconds": 9.46996089700042,
+  "timing_definition": "Per-model total_seconds is the sum of window data preparation, model fitting, and prediction plus probability prediction.",
+  "methodological_interpretation": [
+    "All windows use the same 9,177 traces, class labels, and exact train/test trace-ID membership.",
+    "Differences across windows are therefore attributable mainly to additional observed-prefix information rather than cohort composition or split membership.",
+    "Features encode only whether states were present in the prefix; they do not preserve full state sequence order or multiplicity.",
+    "This is a predictive comparison and does not establish causal effects of states or longer observation windows."
+  ]
+}
