@@ -102,19 +102,46 @@ def repository_relative_path(path: Path, description: str = "Path") -> str:
     return relative_path.as_posix()
 
 
-def reproducibility_metadata(timestamp: str | None = None) -> dict[str, Any]:
-    """Return truthful source-control and environment provenance."""
+def capture_source_provenance(
+    capture_timestamp: str | None = None,
+) -> dict[str, str | bool]:
+    """Capture the source-control state before an experiment writes outputs."""
 
     branch = git_output("branch", "--show-current")
     return {
-        "git_commit_sha": git_output("rev-parse", "HEAD"),
-        "git_branch": branch if branch else "DETACHED_HEAD",
-        "working_tree_dirty": bool(git_output("status", "--porcelain")),
+        "source_git_commit_sha": git_output("rev-parse", "HEAD"),
+        "source_git_branch": branch if branch else "DETACHED_HEAD",
+        "source_working_tree_dirty": bool(
+            git_output("status", "--porcelain")
+        ),
+        "provenance_capture_timestamp": (
+            capture_timestamp
+            or datetime.now(timezone.utc).isoformat()
+        ),
+    }
+
+
+def dependency_versions() -> dict[str, str]:
+    """Return the runtime dependency versions recorded with experiment data."""
+
+    return {
         "python_version": platform.python_version(),
         "sklearn_version": sklearn.__version__,
         "pandas_version": pd.__version__,
         "numpy_version": np.__version__,
-        "timestamp": timestamp or datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def reproducibility_metadata(timestamp: str | None = None) -> dict[str, Any]:
+    """Return the legacy provenance schema for existing artifact consumers."""
+
+    source = capture_source_provenance(timestamp)
+    return {
+        "git_commit_sha": source["source_git_commit_sha"],
+        "git_branch": source["source_git_branch"],
+        "working_tree_dirty": source["source_working_tree_dirty"],
+        **dependency_versions(),
+        "timestamp": source["provenance_capture_timestamp"],
     }
 
 
@@ -211,6 +238,47 @@ def get_positive_probabilities(
     return model.predict_proba(x_test)[:, positive_class_index]
 
 
+def calculate_binary_metrics(
+    y_test: pd.Series,
+    predictions: Any,
+    probabilities: Any | None,
+    *,
+    training_row_count: int,
+    positive_rate: float,
+    number_of_features: int,
+) -> dict[str, float | int | None]:
+    """Calculate the baseline binary-classification metrics."""
+
+    tn, fp, fn, tp = confusion_matrix(
+        y_test,
+        predictions,
+        labels=[0, 1],
+    ).ravel()
+    roc_auc = None
+    if probabilities is not None and y_test.nunique() == 2:
+        roc_auc = float(roc_auc_score(y_test, probabilities))
+
+    return {
+        "accuracy": float(accuracy_score(y_test, predictions)),
+        "precision": float(
+            precision_score(y_test, predictions, zero_division=0)
+        ),
+        "recall": float(
+            recall_score(y_test, predictions, zero_division=0)
+        ),
+        "f1": float(f1_score(y_test, predictions, zero_division=0)),
+        "roc_auc": roc_auc,
+        "tn": int(tn),
+        "fp": int(fp),
+        "fn": int(fn),
+        "tp": int(tp),
+        "training_row_count": training_row_count,
+        "test_row_count": len(y_test),
+        "positive_rate": positive_rate,
+        "number_of_features": number_of_features,
+    }
+
+
 def evaluate_model(
     name: str,
     model: Any,
@@ -226,36 +294,14 @@ def evaluate_model(
     model.fit(x_train, y_train)
     predictions = model.predict(x_test)
     probabilities = get_positive_probabilities(model, x_test)
-    tn, fp, fn, tp = confusion_matrix(
+    metrics = calculate_binary_metrics(
         y_test,
         predictions,
-        labels=[0, 1],
-    ).ravel()
-
-    roc_auc = None
-
-    if probabilities is not None and y_test.nunique() == 2:
-        roc_auc = float(roc_auc_score(y_test, probabilities))
-
-    metrics: dict[str, float | int | None] = {
-        "accuracy": float(accuracy_score(y_test, predictions)),
-        "precision": float(
-            precision_score(y_test, predictions, zero_division=0)
-        ),
-        "recall": float(
-            recall_score(y_test, predictions, zero_division=0)
-        ),
-        "f1": float(f1_score(y_test, predictions, zero_division=0)),
-        "roc_auc": roc_auc,
-        "tn": int(tn),
-        "fp": int(fp),
-        "fn": int(fn),
-        "tp": int(tp),
-        "training_row_count": len(x_train),
-        "test_row_count": len(x_test),
-        "positive_rate": positive_rate,
-        "number_of_features": number_of_features,
-    }
+        probabilities,
+        training_row_count=len(x_train),
+        positive_rate=positive_rate,
+        number_of_features=number_of_features,
+    )
 
     print()
     print("=" * 70)

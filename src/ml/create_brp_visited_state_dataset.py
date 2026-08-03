@@ -56,9 +56,7 @@ def get_fractional_prefix(
     states: list[int],
     prefix_fraction: float,
 ) -> list[int]:
-    """
-    Return the observed prefix of a full trace.
-    """
+    """Return the requested fractional prefix of one full trace."""
 
     if not states:
         raise ValueError(
@@ -74,7 +72,7 @@ def get_fractional_prefix(
 
 
 def positive_integer(value: str) -> int:
-    """Parse a strictly positive integer for argparse."""
+    """Parse a strictly positive prefix length for argparse."""
 
     try:
         parsed_value = int(value)
@@ -86,6 +84,24 @@ def positive_integer(value: str) -> int:
     if parsed_value <= 0:
         raise argparse.ArgumentTypeError(
             "prefix-length must be a positive integer."
+        )
+
+    return parsed_value
+
+
+def positive_cohort_threshold(value: str) -> int:
+    """Parse a strictly positive common-cohort threshold."""
+
+    try:
+        parsed_value = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "cohort-min-transitions must be a positive integer."
+        ) from error
+
+    if parsed_value <= 0:
+        raise argparse.ArgumentTypeError(
+            "cohort-min-transitions must be a positive integer."
         )
 
     return parsed_value
@@ -114,67 +130,66 @@ def parse_transition_count(
     return transition_count
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Create a visited-state prefix dataset from "
-            "BRP execution traces."
-        )
-    )
+def select_trace_cohort(
+    traces: pd.DataFrame,
+    minimum_transitions: int,
+) -> pd.DataFrame:
+    """Select traces strictly longer than a common transition threshold."""
 
-    parser.add_argument(
-        "--input",
-        type=Path,
-        default=DEFAULT_INPUT_PATH,
-        help="Input trace CSV.",
-    )
-
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=DEFAULT_OUTPUT_PATH,
-        help="Output dataset CSV.",
-    )
-
-    prefix_group = parser.add_mutually_exclusive_group(
-        required=True
-    )
-
-    prefix_group.add_argument(
-        "--prefix-fraction",
-        type=float,
-        help=(
-            "Fraction of each completed trace used as the "
-            "observed prefix."
-        ),
-    )
-
-    prefix_group.add_argument(
-        "--prefix-length",
-        type=positive_integer,
-        metavar="K",
-        help=(
-            "Fixed number of transitions observed from the "
-            "beginning of each trace."
-        ),
-    )
-
-    args = parser.parse_args()
-
-    if (
-        args.prefix_fraction is not None
-        and not 0.0 < args.prefix_fraction <= 1.0
-    ):
+    if minimum_transitions <= 0:
+        raise ValueError("minimum_transitions must be a positive integer.")
+    if "number_of_transitions" not in traces.columns:
         raise ValueError(
-            "prefix-fraction must be in (0, 1]."
+            "Trace dataset must contain number_of_transitions."
         )
 
-    traces = pd.read_csv(args.input)
-    total_input_traces = len(traces)
+    transition_counts = pd.to_numeric(
+        traces["number_of_transitions"],
+        errors="coerce",
+    )
+    invalid = (
+        transition_counts.isna()
+        | (transition_counts < 0)
+        | (transition_counts % 1 != 0)
+    )
+    if invalid.any():
+        csv_rows = (traces.index[invalid] + 2).tolist()
+        raise ValueError(
+            "number_of_transitions must contain non-negative integers; "
+            f"invalid CSV rows: {csv_rows}"
+        )
+
+    return traces.loc[
+        transition_counts > minimum_transitions
+    ].copy()
+
+
+def build_visited_state_dataset(
+    traces: pd.DataFrame,
+    *,
+    prefix_fraction: float | None = None,
+    prefix_length: int | None = None,
+    include_trace_id: bool = False,
+) -> tuple[pd.DataFrame, dict[str, int]]:
+    """Build one visited-state prefix dataset without writing it."""
+
+    if (prefix_fraction is None) == (prefix_length is None):
+        raise ValueError(
+            "Specify exactly one of prefix_fraction or prefix_length."
+        )
+    if prefix_fraction is not None and not 0.0 < prefix_fraction <= 1.0:
+        raise ValueError("prefix_fraction must be in (0, 1].")
+    if prefix_length is not None and prefix_length <= 0:
+        raise ValueError("prefix_length must be a positive integer.")
+    if include_trace_id and "trace_id" not in traces.columns:
+        raise ValueError(
+            "Trace dataset must contain trace_id when it is retained."
+        )
 
     all_prefixes: list[list[int]] = []
     final_states: list[int] = []
     labels: list[int] = []
+    trace_ids: list[object] = []
     all_states: set[int] = set()
     excluded_target_traces = 0
     excluded_success_traces = 0
@@ -185,7 +200,7 @@ def main() -> None:
             transition_count = parse_transition_count(
                 row["number_of_transitions"]
             )
-        except ValueError as error:
+        except (KeyError, ValueError) as error:
             raise ValueError(
                 f"Invalid trace at CSV row {row_index + 2}: {error}"
             ) from error
@@ -207,8 +222,8 @@ def main() -> None:
             continue
 
         if (
-            args.prefix_length is not None
-            and transition_count <= args.prefix_length
+            prefix_length is not None
+            and transition_count <= prefix_length
         ):
             if terminal_label == "target":
                 excluded_target_traces += 1
@@ -216,20 +231,19 @@ def main() -> None:
                 excluded_success_traces += 1
             continue
 
-        if args.prefix_length is not None:
-            prefix = states[:args.prefix_length + 1]
+        if prefix_length is not None:
+            prefix = states[:prefix_length + 1]
         else:
             prefix = get_fractional_prefix(
                 states=states,
-                prefix_fraction=args.prefix_fraction,
+                prefix_fraction=prefix_fraction,
             )
 
         all_prefixes.append(prefix)
         final_states.append(states[-1])
-        labels.append(
-            int(row["reached_target"])
-        )
-
+        labels.append(int(row["reached_target"]))
+        if include_trace_id:
+            trace_ids.append(row["trace_id"])
         all_states.update(prefix)
 
     if not all_prefixes:
@@ -246,7 +260,7 @@ def main() -> None:
     )
 
     if (
-        args.prefix_length is not None
+        prefix_length is not None
         and terminal_state_prefix_count != 0
     ):
         raise ValueError(
@@ -256,56 +270,150 @@ def main() -> None:
         )
 
     sorted_states = sorted(all_states)
-
     rows = []
 
-    for prefix, label in zip(
-        all_prefixes,
-        labels,
+    for position, (prefix, label) in enumerate(
+        zip(all_prefixes, labels)
     ):
         visited_states = set(prefix)
-
-        row = {
-            f"visited_state_{state_id}": (
-                1
-                if state_id in visited_states
-                else 0
-            )
-            for state_id in sorted_states
-        }
-
+        row = {}
+        if include_trace_id:
+            row["trace_id"] = trace_ids[position]
+        row.update(
+            {
+                f"visited_state_{state_id}": int(
+                    state_id in visited_states
+                )
+                for state_id in sorted_states
+            }
+        )
         row["prefix_length"] = len(prefix)
         row["last_state"] = prefix[-1]
         row["target"] = label
-
         rows.append(row)
 
     dataset = pd.DataFrame(rows)
+    summary = {
+        "input_trace_count": len(traces),
+        "retained_trace_count": len(dataset),
+        "excluded_target_count": excluded_target_traces,
+        "excluded_success_count": excluded_success_traces,
+        "terminal_leakage_count": terminal_state_prefix_count,
+        "feature_count": len(sorted_states),
+    }
+    return dataset, summary
 
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Create a visited-state prefix dataset from "
+            "BRP execution traces."
+        )
+    )
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=DEFAULT_INPUT_PATH,
+        help="Input trace CSV.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=DEFAULT_OUTPUT_PATH,
+        help="Output dataset CSV.",
+    )
+    prefix_group = parser.add_mutually_exclusive_group(
+        required=True
+    )
+    prefix_group.add_argument(
+        "--prefix-fraction",
+        type=float,
+        help=(
+            "Fraction of each completed trace used as the "
+            "observed prefix."
+        ),
+    )
+    prefix_group.add_argument(
+        "--prefix-length",
+        type=positive_integer,
+        metavar="K",
+        help=(
+            "Fixed number of transitions observed from the "
+            "beginning of each trace."
+        ),
+    )
+    parser.add_argument(
+        "--cohort-min-transitions",
+        type=positive_cohort_threshold,
+        help=(
+            "Optionally retain one common cohort with strictly more than "
+            "this many transitions before constructing the prefix."
+        ),
+    )
+    args = parser.parse_args()
+
+    raw_traces = pd.read_csv(args.input)
+    total_input_traces = len(raw_traces)
+    cohort_excluded = raw_traces.iloc[0:0]
+    selected_traces = raw_traces
+
+    if args.cohort_min_transitions is not None:
+        selected_traces = select_trace_cohort(
+            raw_traces,
+            args.cohort_min_transitions,
+        )
+        cohort_excluded = raw_traces.loc[
+            ~raw_traces.index.isin(selected_traces.index)
+        ]
+
+    dataset, summary = build_visited_state_dataset(
+        selected_traces,
+        prefix_fraction=args.prefix_fraction,
+        prefix_length=args.prefix_length,
+        include_trace_id=args.cohort_min_transitions is not None,
+    )
     args.output.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
-
     dataset.to_csv(
         args.output,
         index=False,
     )
 
+    cohort_excluded_target = int(
+        (cohort_excluded["terminal_label"] == "target").sum()
+    )
+    cohort_excluded_success = int(
+        (cohort_excluded["terminal_label"] == "success").sum()
+    )
+    excluded_target_traces = (
+        cohort_excluded_target
+        + summary["excluded_target_count"]
+    )
+    excluded_success_traces = (
+        cohort_excluded_success
+        + summary["excluded_success_count"]
+    )
+    retained_target_traces = int(dataset["target"].sum())
+    retained_success_traces = len(dataset) - retained_target_traces
+    excluded_traces = total_input_traces - len(dataset)
+
     print("Visited-state prefix dataset created.")
     print(f"Input file: {args.input}")
     print(f"Output file: {args.output}")
-
+    if args.cohort_min_transitions is not None:
+        print(
+            "Cohort rule: number_of_transitions > "
+            f"{args.cohort_min_transitions}"
+        )
     if args.prefix_length is not None:
         print("Observation mode: fixed transition length")
         print(f"Fixed transition length: {args.prefix_length}")
     else:
         print("Observation mode: fractional prefix")
         print(f"Prefix fraction: {args.prefix_fraction}")
-
-    retained_target_traces = int(dataset["target"].sum())
-    retained_success_traces = len(dataset) - retained_target_traces
-    excluded_traces = total_input_traces - len(dataset)
 
     print(f"Total input traces: {total_input_traces}")
     print(f"Retained traces: {len(dataset)}")
@@ -317,7 +425,7 @@ def main() -> None:
     print(f"Retained positive rate: {dataset['target'].mean():.6f}")
     print(
         "Number of visited-state feature columns: "
-        f"{len(sorted_states)}"
+        f"{summary['feature_count']}"
     )
     print(
         "Minimum observed prefix length: "
@@ -329,7 +437,7 @@ def main() -> None:
     )
     print(
         "Retained prefixes containing the final state: "
-        f"{terminal_state_prefix_count}"
+        f"{summary['terminal_leakage_count']}"
     )
 
 
