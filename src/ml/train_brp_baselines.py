@@ -57,6 +57,10 @@ MODEL_SLUGS = {
     "Random Forest": "random_forest",
 }
 
+GENERATED_SYSTEMATIC_OUTPUT_TREE = (
+    "results/systematic/brp_stress_error"
+)
+
 
 def sha256_file(path: Path) -> str:
     """Return the SHA-256 digest of a file."""
@@ -108,12 +112,19 @@ def capture_source_provenance(
     """Capture the source-control state before an experiment writes outputs."""
 
     branch = git_output("branch", "--show-current")
+    working_tree_status = git_output(
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+        "--",
+        ".",
+        f":(exclude){GENERATED_SYSTEMATIC_OUTPUT_TREE}",
+        f":(exclude){GENERATED_SYSTEMATIC_OUTPUT_TREE}/**",
+    )
     return {
         "source_git_commit_sha": git_output("rev-parse", "HEAD"),
         "source_git_branch": branch if branch else "DETACHED_HEAD",
-        "source_working_tree_dirty": bool(
-            git_output("status", "--porcelain")
-        ),
+        "source_working_tree_dirty": bool(working_tree_status),
         "provenance_capture_timestamp": (
             capture_timestamp
             or datetime.now(timezone.utc).isoformat()

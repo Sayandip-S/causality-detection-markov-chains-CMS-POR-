@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -17,6 +18,17 @@ from src.ml.create_brp_visited_state_dataset import (
 from src.ml.train_brp_baselines import select_feature_columns
 import scripts.generate_brp_common_cohort_datasets as cohort_generator
 import src.ml.train_brp_baselines as baseline_training
+
+
+SOURCE_STATUS_ARGUMENTS = (
+    "status",
+    "--porcelain",
+    "--untracked-files=all",
+    "--",
+    ".",
+    ":(exclude)results/systematic/brp_stress_error",
+    ":(exclude)results/systematic/brp_stress_error/**",
+)
 
 
 def example_traces() -> pd.DataFrame:
@@ -123,13 +135,14 @@ def test_provenance_is_captured_before_common_outputs(
         }
     )
     traces.to_csv(raw_path, index=False)
+
     def clean_git_output(*arguments: str) -> str:
         assert not output_directory.exists()
         assert not manifest_path.exists()
         responses = {
             ("branch", "--show-current"): "test-branch",
             ("rev-parse", "HEAD"): "clean-source-sha",
-            ("status", "--porcelain"): "",
+            SOURCE_STATUS_ARGUMENTS: "",
         }
         return responses[arguments]
 
@@ -166,3 +179,107 @@ def test_provenance_is_captured_before_common_outputs(
         (tmp_path / window["output_path"]).is_file()
         for window in persisted["windows"]
     )
+
+
+def initialise_test_repository(repository: Path) -> str:
+    """Create a minimal repository and return its initial commit SHA."""
+
+    subprocess.run(
+        ["git", "init", "--initial-branch=test-branch"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.name", "Test User"],
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"],
+        cwd=repository,
+        check=True,
+    )
+    tracked_source = repository / "src/tracked.py"
+    tracked_source.parent.mkdir(parents=True)
+    tracked_source.write_text("VALUE = 1\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", "--", "src/tracked.py"],
+        cwd=repository,
+        check=True,
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "Initial source"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def test_generated_systematic_outputs_do_not_make_source_dirty(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    expected_sha = initialise_test_repository(tmp_path)
+    generated_output = (
+        tmp_path
+        / "results/systematic/brp_stress_error/metrics/result.json"
+    )
+    generated_output.parent.mkdir(parents=True)
+    generated_output.write_text("{}\n", encoding="utf-8")
+    monkeypatch.setattr(baseline_training, "PROJECT_ROOT", tmp_path)
+
+    provenance = baseline_training.capture_source_provenance(
+        "2026-08-03T00:00:00+00:00"
+    )
+
+    assert provenance == {
+        "source_git_commit_sha": expected_sha,
+        "source_git_branch": "test-branch",
+        "source_working_tree_dirty": False,
+        "provenance_capture_timestamp": "2026-08-03T00:00:00+00:00",
+    }
+
+
+def test_unrelated_untracked_source_file_makes_source_dirty(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    initialise_test_repository(tmp_path)
+    (tmp_path / "src/untracked.py").write_text(
+        "VALUE = 2\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(baseline_training, "PROJECT_ROOT", tmp_path)
+
+    provenance = baseline_training.capture_source_provenance()
+
+    assert provenance["source_working_tree_dirty"] is True
+
+
+def test_modified_tracked_source_file_makes_source_dirty(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    expected_sha = initialise_test_repository(tmp_path)
+    (tmp_path / "src/tracked.py").write_text(
+        "VALUE = 2\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(baseline_training, "PROJECT_ROOT", tmp_path)
+
+    provenance = baseline_training.capture_source_provenance()
+
+    assert provenance["source_git_commit_sha"] == expected_sha
+    assert provenance["source_git_branch"] == "test-branch"
+    assert provenance["provenance_capture_timestamp"]
+    assert provenance["source_working_tree_dirty"] is True
