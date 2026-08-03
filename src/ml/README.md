@@ -182,6 +182,43 @@ The runner writes per-window JSON files (`k5.json`, `k10.json`, `k20.json`, and 
 results/metrics/brp_fixed_windows/
 ```
 
+### Common-cohort fixed-window datasets
+
+The operational-window analysis above retains traces separately at each
+window: a k-window dataset contains traces with more than k transitions. This
+describes prediction among traces that are still active at each observation
+point, but its population changes with k.
+
+The common-cohort analysis instead selects
+`number_of_transitions > 50` once and uses those same ordered trace IDs and
+targets for k=5, 10, 20, and 50. It therefore supports a controlled comparison
+of information gained from longer prefixes without changing trace population
+or deterministic train/test membership.
+
+Generate all four ignored datasets and the tracked validation manifest with:
+
+```bash
+python -m scripts.generate_brp_common_cohort_datasets
+```
+
+Common-cohort datasets retain `trace_id` as row metadata. The
+`visited_states_only` feature selector uses only `visited_state_*` columns, so
+`trace_id`, `target`, `prefix_length`, and `last_state` never enter the ML
+features.
+
+Run the common-cohort baseline comparison with:
+
+```bash
+python -m scripts.run_brp_common_cohort_baselines
+```
+
+All four windows use the same 9,177 traces, constant class balance, and one
+shared deterministic stratified train/test trace-ID split. Changes across k
+are therefore attributable mainly to additional observed prefix information,
+not changing cohort composition or split membership. The features still
+encode only visited-state presence; they do not preserve full sequence order,
+transition order, or repeated state visits.
+
 ## 6. First Dataset: Summary Prefix Features
 
 The first ML dataset used simple summary features calculated from each prefix:
@@ -1072,3 +1109,593 @@ Pending:
 - [ ] Richer fixed-window features
 - [ ] Strict path-conditioned probability raising
 - [ ] Final experiment cleanup and documentation
+
+# Meeting Update — BRP Systematic Evaluation and Exact Candidate Reachability
+
+Date: 2026-07-27
+
+## 1. Objectives since the previous meeting
+
+The work since the previous meeting focused on making the BRP evaluation more
+systematic and connecting ML-selected states to exact Storm probabilities. It
+addressed five questions:
+
+1. How does prediction quality change with the observation-window length?
+2. Was the earlier prefix comparison affected by using different trace
+   populations?
+3. How likely is each ML-selected candidate state to be reached from the
+   initial state?
+4. Once a candidate is reached, how strongly does it raise the exact future
+   target probability?
+5. Can the experimental results be presented through reproducible tables and
+   plots?
+
+No new neural-network model was added. The priority was systematic evaluation,
+cohort control, and exact Storm verification of the current interpretable
+baselines.
+
+## 2. Model and target configuration
+
+- Benchmark: Bounded Retransmission Protocol (BRP)
+- Model: `models/prism/brp/brp_stress_error_target.pm`
+- Property: `models/properties/brp/brp_target.pctl`
+- Target: final sender error, `s=5`
+- Storm model size: 1,221 states and 1,603 transitions
+- Exact initial target probability: `0.3416445845150787`
+- Original trace dataset: 10,000 traces
+- Original class counts: 3,429 target and 6,571 success
+
+The binary machine-learning task is:
+
+> Given an observed execution prefix, predict whether the complete execution
+> will eventually reach the final sender-error state.
+
+This is binary outcome classification. It is not next-state prediction, and it
+is not yet formal causal inference.
+
+## 3. Why the common cohort was needed
+
+### Operational-window experiment
+
+The operational experiment independently retains traces satisfying
+`number_of_transitions > k` at every observation window. Its populations are:
+
+| Window | Retained traces |
+| ---: | ---: |
+| k=5 | 10,000 |
+| k=10 | 9,956 |
+| k=20 | 9,723 |
+| k=50 | 9,177 |
+
+The population and class balance therefore change with `k`. Short
+target-ending traces are progressively excluded as the required survival
+window becomes longer.
+
+### Common-cohort experiment
+
+The controlled experiment first selects traces satisfying
+`number_of_transitions > 50`, then creates four feature views of those same
+9,177 traces using the first 5, 10, 20, or 50 transitions.
+
+- Retained target traces: 2,606
+- Retained success traces: 6,571
+- Target rate: `0.2839707966`, approximately 0.284
+- Training rows: 7,341
+- Test rows: 1,836
+- Trace IDs and deterministic train/test membership are identical at every
+  window.
+- No terminal-state leakage was detected.
+
+This design makes changes across `k` attributable mainly to additional
+observed prefix information rather than changing trace composition.
+
+![Operational retained traces by window](../../results/systematic/brp_stress_error/plots/operational_retained_traces_by_window.png)
+
+Retained traces decrease because progressively longer operational windows
+exclude executions that have already terminated. In this dataset, the
+excluded short executions are target traces, while the 6,571 success traces
+remain. The target rate consequently falls from 0.3429 at k=5 to approximately
+0.2840 at k=50. This population shift motivated the common-cohort experiment.
+
+## 4. Machine-learning representation
+
+The current representation is binary visited-state presence:
+
+```text
+visited_state_X = 1 if Storm state X occurs in the observed prefix, otherwise 0
+```
+
+It captures which states were observed. It discards:
+
+- state order;
+- transition order;
+- repeated visits;
+- time spent in a state.
+
+The results therefore measure the predictive value of unordered visited-state
+presence, not the predictive value of a complete execution sequence.
+
+## 5. Models
+
+### Logistic Regression
+
+Logistic Regression predicts the positive-class probability from a weighted
+linear combination of features transformed by the logistic function. A
+positive coefficient for `visited_state_X` means that observing state X raises
+the model's predicted log-odds of eventual target, conditional on the other
+features.
+
+A coefficient is not itself a probability. `exp(coefficient)` is an odds
+multiplier, and correlations among visited-state features can affect the
+coefficient values.
+
+### Decision Tree
+
+A Decision Tree applies a sequence of binary rules, such as “Was state X
+visited?” It can represent nonlinear combinations of states, but a single tree
+can be unstable or overfit its training sample.
+
+### Random Forest
+
+A Random Forest combines many decision trees trained on different samples and
+feature subsets. It can represent nonlinear interactions, but impurity-based
+feature importance has no direction and does not itself prove probability
+raising.
+
+## 6. Evaluation metrics
+
+### Accuracy
+
+Accuracy is the fraction of all test traces classified correctly. It can be
+misleading when target and success classes are imbalanced because a model can
+obtain high accuracy by favoring the majority class.
+
+### Precision
+
+```text
+precision = TP / (TP + FP)
+```
+
+Among traces predicted as eventual targets, precision asks how many actually
+reached the target.
+
+### Recall
+
+```text
+recall = TP / (TP + FN)
+```
+
+Among all traces that actually reached the target, recall asks how many the
+classifier detected.
+
+### F1 score
+
+```text
+F1 = 2 × precision × recall / (precision + recall)
+```
+
+F1 is the harmonic mean of precision and recall. A higher F1 means that the
+classifier balances detecting target traces and avoiding false target
+predictions more effectively. F1 does not account for true negatives directly
+and depends on the selected classification threshold.
+
+### ROC-AUC
+
+ROC-AUC measures how well predicted scores rank a randomly chosen target trace
+above a randomly chosen success trace across all classification thresholds.
+A value of 0.5 is approximately random ranking, while 1.0 is perfect ranking.
+Values near 0.5 indicate weak discrimination. ROC-AUC is useful here because it
+measures ranking ability independently of one hard decision threshold.
+
+The confusion-matrix terms are:
+
+- TN: success correctly predicted as success;
+- FP: success incorrectly predicted as target;
+- FN: target incorrectly predicted as success;
+- TP: target correctly predicted as target.
+
+## 7. Common-cohort results
+
+All values below come from the shared 9,177-trace cohort and are rounded to
+four decimal places.
+
+| k | Model | Features | Precision | Recall | F1 | ROC-AUC |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 5 | Logistic Regression | 12 | 0.3192 | 0.1593 | 0.2125 | 0.5120 |
+| 5 | Decision Tree | 12 | 0.3192 | 0.1593 | 0.2125 | 0.5120 |
+| 5 | Random Forest | 12 | 0.3117 | 0.1382 | 0.1915 | 0.5053 |
+| 10 | Logistic Regression | 37 | 0.3126 | 0.2802 | 0.2955 | 0.5179 |
+| 10 | Decision Tree | 37 | 0.3115 | 0.3474 | 0.3285 | 0.5187 |
+| 10 | Random Forest | 37 | 0.3080 | 0.3263 | 0.3169 | 0.5175 |
+| 20 | Logistic Regression | 88 | 0.3017 | 0.2802 | 0.2905 | 0.5088 |
+| 20 | Decision Tree | 88 | 0.3066 | 0.1689 | 0.2178 | 0.5047 |
+| 20 | Random Forest | 88 | 0.3050 | 0.2476 | 0.2733 | 0.5056 |
+| 50 | Logistic Regression | 251 | 0.3166 | 0.3628 | 0.3381 | 0.5383 |
+| 50 | Decision Tree | 251 | 0.3277 | 0.1497 | 0.2055 | 0.5173 |
+| 50 | Random Forest | 251 | 0.3213 | 0.2898 | 0.3047 | 0.5246 |
+
+![Common-cohort F1 by window](../../results/systematic/brp_stress_error/plots/common_cohort_f1_by_window.png)
+
+Every plotted point uses the same 9,177 traces and identical split membership.
+Logistic Regression improves overall from k=5 to its best F1 of approximately
+0.338 at k=50. Decision Tree has its best F1, approximately 0.329, at k=10.
+Random Forest also has its best F1, approximately 0.317, at k=10. Improvement
+is not monotonic: observing more states does not automatically produce better
+hard classifications.
+
+![Common-cohort ROC-AUC by window](../../results/systematic/brp_stress_error/plots/common_cohort_roc_auc_by_window.png)
+
+Logistic Regression reaches its highest ROC-AUC, approximately 0.538, at k=50.
+Random Forest reaches approximately 0.525 at k=50, while Decision Tree peaks
+near 0.519 at k=10. All values remain close to 0.5. The unordered
+visited-state representation contains some predictive signal, especially for
+longer prefixes, but the signal is weak and inconsistent. This does not imply
+that the models are useless.
+
+## 8. Operational versus common-cohort interpretation
+
+The table reports common-cohort minus operational performance.
+
+| k | Model | Delta F1 | Delta ROC-AUC |
+| ---: | --- | ---: | ---: |
+| 5 | Logistic Regression | -0.0387 | -0.0125 |
+| 5 | Decision Tree | -0.0387 | -0.0125 |
+| 5 | Random Forest | -0.0598 | -0.0193 |
+| 10 | Logistic Regression | -0.0506 | -0.0098 |
+| 10 | Decision Tree | -0.0176 | -0.0090 |
+| 10 | Random Forest | -0.0293 | -0.0102 |
+| 20 | Logistic Regression | -0.0154 | -0.0309 |
+| 20 | Decision Tree | 0.0143 | -0.0100 |
+| 20 | Random Forest | -0.0512 | -0.0227 |
+| 50 | Logistic Regression | 0.0000 | 0.0000 |
+| 50 | Decision Tree | 0.0000 | 0.0000 |
+| 50 | Random Forest | 0.0000 | 0.0000 |
+
+Common-cohort results are generally lower at k=5, k=10, and k=20. The one F1
+exception is Decision Tree at k=20, although its ROC-AUC is still lower. This
+shows that part of the earlier performance pattern was related to changing
+cohort composition. Results are identical at k=50 because the operational k50
+population already consists of traces with more than 50 transitions. The
+common cohort is therefore the more defensible design for studying information
+gained as `k` increases.
+
+## 9. Candidate-state extraction
+
+Candidates came from the k=20 fixed-window experiment through this provenance
+chain:
+
+```text
+k20 visited-state dataset
+    → saved Logistic Regression and Random Forest
+    → candidate-state ranking
+    → PRISM valuation mapping
+    → exact Storm verification
+```
+
+The ranking combines a positive Logistic Regression coefficient, Random
+Forest importance, empirical target-probability difference, and support
+weighting. The empirical target-probability difference is:
+
+```text
+P(target | candidate observed)
+− P(target | candidate not observed)
+```
+
+The normalized combined score is a ranking heuristic. It is not a probability
+and not a formal causality score. Only the selected top 20 candidates were
+sent to candidate-specific exact verification. They are not necessarily the
+globally best 20 states among all 1,221 Storm states.
+
+## 10. Previous and new exact Storm verification
+
+The previous verification calculated:
+
+```text
+P_C(F target)
+```
+
+This asks: if the system is currently in candidate state C, what is the exact
+probability of eventually reaching the target?
+
+The new verification additionally calculates:
+
+```text
+P_initial(F C)
+```
+
+This asks: starting from the initial state, what is the exact probability of
+eventually reaching candidate C?
+
+Both quantities are needed. Target probability from C measures future risk
+after reaching C, while reachability of C measures how much model behavior can
+encounter C.
+
+The comparison baseline and exact quantities are:
+
+- Baseline: `P_initial(F target) = 0.3416445845150787`
+- Exact candidate reachability: `P_initial(F candidate)`
+- Exact target probability from a candidate:
+  `P_candidate(F target)`
+
+A useful candidate should ideally be both reasonably reachable and probability
+raising. The compact table contains the five highest ML-ranked candidates that
+pass exact probability raising, together with every non-probability-raising
+candidate. Rows are displayed by exact difference from baseline in descending
+order; ML rank is retained to show the original k=20 ranking.
+
+| ML rank | State ID | Valuation summary | Empirical difference | Exact P(reach candidate from initial) | Exact P(target from candidate) | Exact difference from baseline | Raises probability |
+| ---: | ---: | --- | ---: | ---: | ---: | ---: | :---: |
+| 4 | 69 | `s=3, i=2, nrtr=1, r=4, rrep=2, k=0, l=0` | 0.0942 | 0.032300 | 0.483027 | 0.141382 | Yes |
+| 1 | 89 | `s=3, i=3, nrtr=1, r=4, rrep=2, k=0, l=0` | 0.2196 | 0.021920 | 0.476229 | 0.134585 | Yes |
+| 2 | 82 | `s=2, i=3, nrtr=1, r=4, rrep=2, k=2, l=0` | 0.2196 | 0.021920 | 0.476229 | 0.134585 | Yes |
+| 3 | 101 | `s=2, i=3, nrtr=1, r=4, rrep=2, k=0, l=2` | 0.1956 | 0.019460 | 0.476229 | 0.134585 | Yes |
+| 5 | 83 | `s=2, i=2, nrtr=2, r=2, rrep=2, k=0, l=0` | 0.0832 | 0.027455 | 0.391796 | 0.050152 | Yes |
+| 16 | 56 | `s=2, i=2, nrtr=1, r=3, rrep=2, k=0, l=0` | 0.0165 | 0.125845 | 0.340099 | -0.001546 | No |
+| 20 | 22 | `s=1, i=2, nrtr=0, r=4, rrep=1, k=0, l=0` | -0.0161 | 0.765000 | 0.332988 | -0.008656 | No |
+| 15 | 100 | `s=2, i=3, nrtr=1, r=4, rrep=2, k=0, l=1` | -0.0372 | 0.175139 | 0.315332 | -0.026312 | No |
+
+The empirical difference is the previous verification CSV's
+`probability_difference` column, equivalent to the sampled
+`empirical_probability_difference` requested for this summary. It is joined
+to the current exact-reachability rows by `state_id`; the current exact CSV
+does not duplicate this empirical association column.
+
+The table shows:
+
+1. State 69 has the largest exact probability increase.
+2. States 89, 82, and 101 have the same exact target probability from the
+   candidate, although their exact candidate reachabilities are not all the
+   same.
+3. States 100, 56, and 22 do not raise exact target probability above the
+   baseline.
+4. High reachability alone does not imply probability raising.
+5. The candidates originate from the k=20 ML ranking. Only the selected top 20
+   candidates received candidate-specific verification, not all 1,221 states.
+
+The empirical difference and exact probabilities represent different
+quantities:
+
+- `empirical_probability_difference` is a sampled association in the k20
+  prefix dataset.
+- `exact_candidate_reachability` is the unbounded Storm probability of
+  reaching the candidate.
+- `target_probability_from_candidate` is the exact future target probability
+  when currently in the candidate.
+
+The empirical difference is not an exact model-checking probability.
+
+This is state-based verification:
+
+```text
+P_candidate(F target)
+```
+
+It is not the historical path-conditioned quantity:
+
+```text
+P(target | candidate was visited earlier)
+```
+
+Across all 20 selected candidates, 17 raise the exact target probability and
+the exact candidate-reachability range is `0.0124212116093038` to `0.765`.
+State 22 has the greatest exact reachability and highest
+`risk_weighted_coverage`, but it does not raise probability above baseline.
+High reachability or a high descriptive product does not imply probability
+raising.
+
+## 11. Candidate reachability versus future risk
+
+![Exact candidate reachability versus target risk](../../results/systematic/brp_stress_error/plots/exact_candidate_reachability_vs_target_risk.png)
+
+The x-axis is exact initial-to-candidate reachability,
+`P_initial(F candidate)`. The y-axis is exact candidate-to-target probability,
+`P_candidate(F target)`. The horizontal line is the exact initial target
+baseline. Points above it are state-based probability-raising candidates.
+
+The upper-right region contains candidates that are comparatively reachable
+and have high future target risk. Upper-left candidates have high future risk
+but are rarely reached. Lower-right candidates may be common but do not offer
+strong probability raising. This plot helps prioritize candidate states, but
+it does not establish causality.
+
+## 12. Exact probability increase by candidate
+
+![Exact target probability increase by candidate](../../results/systematic/brp_stress_error/plots/exact_probability_increase_by_candidate.png)
+
+Each bar represents:
+
+```text
+P_C(F target) − P_initial(F target)
+```
+
+Positive values indicate state-based probability raising; negative values
+indicate lower future target probability than the initial baseline. Seventeen
+bars are positive and three are non-positive. State 69 has the largest
+increase. This is current-state verification, not historical path
+conditioning.
+
+## 13. Empirical support versus exact reachability limitation
+
+`empirical_support_fraction` is the fraction of the 9,723 retained k20 rows in
+which the candidate occurs within the initial state plus the first 20
+transitions. `exact_candidate_reachability` is the unbounded, unconditional
+Storm probability `P_initial(F candidate)`.
+
+These are different events:
+
+- empirical support is bounded to the first 20 transitions;
+- its population is conditioned on the trace surviving beyond 20 transitions;
+- exact Storm reachability is unbounded and unconditional.
+
+The support-reachability gap therefore combines sampling variation, finite
+observation horizon, and population conditioning. It must not be interpreted
+as pure Monte Carlo estimation error.
+
+## 14. Risk-weighted coverage
+
+The exploratory quantity is:
+
+```text
+risk_weighted_coverage
+= exact_candidate_reachability × target_probability_from_candidate
+```
+
+It is only a descriptive prioritization heuristic. It is not the probability
+that failure occurs through the candidate, not a probability of causality, not
+a formal probability-raising definition, and not path-conditioned. It does
+not account for path overlap or ordering.
+
+## 15. Main findings
+
+1. Controlling the trace population changes the interpretation of the prefix
+   experiment.
+2. Longer prefixes give modest improvements for some models, but not
+   monotonically.
+3. ROC-AUC remains near 0.5, so unordered visited-state presence is a weak
+   predictor.
+4. Logistic Regression performs best at k=50 among the current common-cohort
+   models.
+5. ML candidate extraction nevertheless identifies many states that pass
+   exact state-based probability raising.
+6. Exact candidate reachability adds an important coverage dimension.
+7. A state can be frequently reached without raising target probability.
+8. The current results identify preliminary probability-raising candidate
+   states, not proven causes.
+
+## 16. Limitations
+
+- The visited-state representation discards order and repetition.
+- Only one BRP model configuration is evaluated.
+- Only one main trace sample is currently used.
+- Candidate stability across sampling seeds and sample sizes is not yet
+  measured.
+- Candidate extraction is based on k=20.
+- Only the selected top 20 candidates receive candidate-specific reachability
+  verification.
+- Current Storm verification is state-based.
+- Historical path-conditioned probability
+  `P(target | candidate was visited earlier)` is not yet calculated.
+- The risk-weighted product is only heuristic.
+- Runtime measurements depend on the machine and environment.
+
+## 17. Recommended next experiments
+
+1. Run a sample-size study with 500, 1,000, 2,500, 5,000, and the full cohort.
+2. Repeat the experiments with several sampling seeds.
+3. Measure top-k candidate-ranking stability.
+4. Compare full-trace empirical visitation with exact unbounded candidate
+   reachability.
+5. Interpret the top candidate valuations at the PRISM semantic level.
+6. Optionally test transition-count or sequence-aware features after the
+   systematic baseline is complete.
+
+Neural networks are not the immediate required next step.
+
+## 18. Presentation summary
+
+### Two-minute presentation explanation
+
+Since the previous meeting, I focused on making the BRP prefix experiment a
+controlled comparison and connecting the ML candidates to exact model
+checking. The original operational datasets retained traces separately at
+each observation window, so longer windows progressively removed short
+target-ending traces. That meant both the available information and the trace
+population changed at the same time.
+
+I therefore created a common cohort of 9,177 traces that all survive beyond 50
+transitions. The same traces and train/test membership are used for k=5, 10,
+20, and 50. Logistic Regression gives the strongest common-cohort result at
+k=50, with F1 approximately 0.338 and ROC-AUC approximately 0.538. Decision
+Tree and Random Forest peak at different windows, and improvement is not
+monotonic. ROC-AUC remains close to 0.5, so unordered visited-state presence
+contains some signal but provides weak and inconsistent discrimination.
+
+For the k=20 ML-selected candidates, I extended exact verification beyond the
+probability of reaching the target from each state. The analysis now also
+computes the exact probability of reaching each candidate from the initial
+state. Seventeen of 20 candidates raise future target probability above the
+initial baseline. However, state 22 illustrates the central caution: it is the
+most reachable candidate and has the highest descriptive risk-weighted
+coverage, yet it does not raise target probability. These results identify
+preliminary state-based probability-raising candidates, not proven causes.
+The main limitation is that visited-state features discard order, and the
+verification does not yet compute historical path-conditioned probability.
+
+## 19. Selected plots
+
+The five embedded plots above were selected because together they explain the
+cohort correction, F1 behavior, score-ranking quality, candidate reachability,
+and exact probability raising:
+
+1. `operational_retained_traces_by_window.png`
+2. `common_cohort_f1_by_window.png`
+3. `common_cohort_roc_auc_by_window.png`
+4. `exact_candidate_reachability_vs_target_risk.png`
+5. `exact_probability_increase_by_candidate.png`
+
+### Additional generated plots
+
+- [Operational versus common-cohort F1](../../results/systematic/brp_stress_error/plots/operational_vs_common_f1.png)
+- [Operational versus common-cohort ROC-AUC](../../results/systematic/brp_stress_error/plots/operational_vs_common_roc_auc.png)
+- [Operational target rate by window](../../results/systematic/brp_stress_error/plots/operational_target_rate_by_window.png)
+- [Empirical support versus exact reachability](../../results/systematic/brp_stress_error/plots/empirical_support_vs_exact_reachability.png)
+- [Exact candidate reachability by candidate](../../results/systematic/brp_stress_error/plots/exact_candidate_reachability_by_candidate.png)
+- [Risk-weighted coverage by candidate](../../results/systematic/brp_stress_error/plots/risk_weighted_coverage_by_candidate.png)
+
+## 20. Reproduction commands
+
+Run these commands from the repository root.
+
+Generate the common-cohort datasets and manifest:
+
+```bash
+python -m scripts.generate_brp_common_cohort_datasets
+```
+
+Run the common-cohort baselines and operational comparison:
+
+```bash
+python -m scripts.run_brp_common_cohort_baselines
+```
+
+Run exact initial-to-candidate and candidate-to-target verification:
+
+```bash
+python -m scripts.verify_brp_candidate_states \
+    --model models/prism/brp/brp_stress_error_target.pm \
+    --property models/properties/brp/brp_target.pctl \
+    --candidates results/candidate_states/brp_k20_candidate_states.csv \
+    --output results/systematic/brp_stress_error/reachability/candidate_exact_reachability.csv \
+    --top-k 20
+```
+
+Generate all current experiment plots and the plot summary:
+
+```bash
+python scripts/plot_brp_current_experiments.py
+```
+
+## 21. Artifact links
+
+Common-cohort artifacts:
+
+- [Common-cohort manifest](../../results/systematic/brp_stress_error/metrics/common_cohort_manifest.json)
+- [Common-cohort per-model metrics](../../results/systematic/brp_stress_error/metrics/common_cohort_per_model.csv)
+- [Common-cohort summary](../../results/systematic/brp_stress_error/metrics/common_cohort_summary.json)
+- [Operational-versus-common comparison](../../results/systematic/brp_stress_error/metrics/operational_vs_common_cohort.csv)
+
+Candidate-verification artifacts:
+
+- [Exact candidate-reachability results](../../results/systematic/brp_stress_error/reachability/candidate_exact_reachability.csv)
+- [Exact candidate-reachability metadata](../../results/systematic/brp_stress_error/reachability/candidate_exact_reachability.metadata.json)
+
+Plots and descriptions:
+
+- [Current plot summary](../../results/systematic/brp_stress_error/reports/current_plot_summary.md)
+- [Plotting script](../../scripts/plot_brp_current_experiments.py)
+
+Relevant experiment runners:
+
+- [Common-cohort dataset generator](../../scripts/generate_brp_common_cohort_datasets.py)
+- [Common-cohort baseline runner](../../scripts/run_brp_common_cohort_baselines.py)
+- [Exact candidate verifier](../../scripts/verify_brp_candidate_states.py)
