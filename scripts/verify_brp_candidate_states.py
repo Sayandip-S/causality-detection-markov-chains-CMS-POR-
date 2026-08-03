@@ -16,8 +16,9 @@ from scripts.map_brp_candidate_states import (
     map_candidates,
 )
 from src.ml.train_brp_baselines import (
+    capture_source_provenance,
+    dependency_versions,
     repository_relative_path,
-    reproducibility_metadata,
 )
 from src.storm.model_utils import load_prism_model
 
@@ -287,6 +288,7 @@ def main() -> None:
     parser.add_argument("--top-k", type=int, default=20)
     args = parser.parse_args()
 
+    source_provenance = capture_source_provenance()
     started_at = datetime.now(timezone.utc)
     started_timer = time.perf_counter()
     model_path = args.model.resolve()
@@ -336,7 +338,10 @@ def main() -> None:
     completed_at = datetime.now(timezone.utc)
     execution_time_seconds = time.perf_counter() - started_timer
     baseline_probability = float(target_result.at(initial_state_id))
+    output_generation_timestamp = completed_at.isoformat()
     metadata = {
+        **source_provenance,
+        "output_generation_timestamp": output_generation_timestamp,
         "model_path": repository_relative_path(model_path, "Model path"),
         "property_path": repository_relative_path(
             property_path,
@@ -434,7 +439,14 @@ def main() -> None:
             "Storm sparse-model state IDs depend on this model, property set, "
             "builder configuration, and Storm version.",
         ],
-        **reproducibility_metadata(completed_at.isoformat()),
+        # Legacy aliases remain for consumers of the earlier metadata schema.
+        "git_commit_sha": source_provenance["source_git_commit_sha"],
+        "git_branch": source_provenance["source_git_branch"],
+        "working_tree_dirty": source_provenance[
+            "source_working_tree_dirty"
+        ],
+        **dependency_versions(),
+        "timestamp": output_generation_timestamp,
     }
     metadata_path = output_path.with_suffix(".metadata.json")
     metadata_path.write_text(
