@@ -1,0 +1,230 @@
+{
+  "source_git_commit_sha": "f4d4f7af1c2109b6af3678822a1e919b82b62a86",
+  "source_git_branch": "feat/brp-sample-size-stability",
+  "source_working_tree_dirty": false,
+  "provenance_capture_timestamp": "2026-08-11T08:38:08.689504+00:00",
+  "python_version": "3.12.3",
+  "sklearn_version": "1.8.0",
+  "pandas_version": "2.3.3",
+  "numpy_version": "2.4.6",
+  "experiment_name": "brp_k20_sample_size_stability",
+  "execution_mode": "quick",
+  "config_path": "experiments/brp_k20_sample_size_stability.json",
+  "config_sha256": "72b8cc30fe6c57878c60d1821c767b99702398a20b7e3fa330e7999b9fecb92f",
+  "output_root": "results/systematic/brp_stress_error/sample_size",
+  "output_root_is_repository_relative": true,
+  "input_artifacts": {
+    "dataset": {
+      "path": "data/processed/brp_stress_common50_visited_state_dataset_k20.csv",
+      "sha256": "564edd1b30854fb18d1846da840ed15ac96523c722ac826499f4c33b673b24d9"
+    },
+    "common_cohort_manifest": {
+      "path": "results/systematic/brp_stress_error/metrics/common_cohort_manifest.json",
+      "sha256": "cb5a207ed65b00cf116bfdba4b5a453786244624f20495d87a4e4fe465abac40"
+    },
+    "common_cohort_summary": {
+      "path": "results/systematic/brp_stress_error/metrics/common_cohort_summary.json",
+      "sha256": "dbe94f537afda4408f3df664386dd735f0debcda95b49688e0930b0671daa9aa"
+    },
+    "existing_exact_reachability": {
+      "path": "results/systematic/brp_stress_error/reachability/candidate_exact_reachability.csv",
+      "sha256": "512dc90be1a30c9df57301cdca996510f136089ed087febe3bcd9661980066a9"
+    },
+    "prism_model": {
+      "path": "models/prism/brp/brp_stress_error_target.pm",
+      "sha256": "d4d5df140810a73e6a03e93b84cd68c6b7235a932140d860f842c2d0a2db678a"
+    },
+    "property_file": {
+      "path": "models/properties/brp/brp_target.pctl",
+      "sha256": "09a6b528f9c6abc9f613dbd42926329af85b0594e4701eebe15161537c45ec57"
+    }
+  },
+  "selected_training_sample_sizes": [
+    500,
+    1000,
+    2500,
+    5000,
+    7341
+  ],
+  "selected_sampling_seeds": [
+    42,
+    123,
+    456
+  ],
+  "full_training_sampling_seed": null,
+  "prediction_evaluation_count": 39,
+  "candidate_ranking_count": 13,
+  "fixed_split": {
+    "split_seed": 42,
+    "test_size": 0.2,
+    "train_rows": 7341,
+    "test_rows": 1836,
+    "train_trace_id_sha256": "59c7b8869b0aab341fb7695b01157bbc731c8047ee271abc2e4105312e2122aa",
+    "test_trace_id_sha256": "80061fa2fc440c6a1b63de1014115d9c54823b174baabd3a73ff9d2051b31d42",
+    "no_overlap": true
+  },
+  "candidate_support_rule": {
+    "minimum_count_floor": 5,
+    "training_fraction": 0.005,
+    "formula": "max(5, ceil(0.005 * training_sample_size))"
+  },
+  "candidate_statistics_population": "sampled training rows only",
+  "sampling_records": [
+    {
+      "training_sample_size": 500,
+      "sampling_seed": 42,
+      "sampled_training_trace_id_sha256": "f99323701194062cf536da900fd885833f09ee0f249afde87503b9e422ce6950",
+      "target_count": 142,
+      "target_rate": 0.284,
+      "minimum_support_used": 5,
+      "ranking_eligible_state_count": 76,
+      "condition_seconds": 0.5544001620000927
+    },
+    {
+      "training_sample_size": 500,
+      "sampling_seed": 123,
+      "sampled_training_trace_id_sha256": "91c2d66b2180cba6ac497a3085763168763493441234afd800047b631ff179d5",
+      "target_count": 142,
+      "target_rate": 0.284,
+      "minimum_support_used": 5,
+      "ranking_eligible_state_count": 82,
+      "condition_seconds": 0.5042772079996212
+    },
+    {
+      "training_sample_size": 500,
+      "sampling_seed": 456,
+      "sampled_training_trace_id_sha256": "19cfa6269293dd41cefdeaf8b81566e8fca39c3897072fd31b95a585815d60fb",
+      "target_count": 142,
+      "target_rate": 0.284,
+      "minimum_support_used": 5,
+      "ranking_eligible_state_count": 84,
+      "condition_seconds": 0.5108191520002947
+    },
+    {
+      "training_sample_size": 1000,
+      "sampling_seed": 42,
+      "sampled_training_trace_id_sha256": "392e65b0d2217e567e241fcdd3e3749022d11ba84fbb82b61c6ee25d41c1cf82",
+      "target_count": 284,
+      "target_rate": 0.284,
+      "minimum_support_used": 5,
+      "ranking_eligible_state_count": 88,
+      "condition_seconds": 0.536599729000045
+    },
+    {
+      "training_sample_size": 1000,
+      "sampling_seed": 123,
+      "sampled_training_trace_id_sha256": "53c0cb9d0b69a14378d4aae049c00c3bb73766215ce94359f14f6a36f48cd5ab",
+      "target_count": 284,
+      "target_rate": 0.284,
+      "minimum_support_used": 5,
+      "ranking_eligible_state_count": 88,
+      "condition_seconds": 0.5513130310000633
+    },
+    {
+      "training_sample_size": 1000,
+      "sampling_seed": 456,
+      "sampled_training_trace_id_sha256": "eb6c50b85824b47d5dc1a1b456a7acc2df5b8601a0371a2832561c8ab58a6543",
+      "target_count": 284,
+      "target_rate": 0.284,
+      "minimum_support_used": 5,
+      "ranking_eligible_state_count": 86,
+      "condition_seconds": 0.5544489420008176
+    },
+    {
+      "training_sample_size": 2500,
+      "sampling_seed": 42,
+      "sampled_training_trace_id_sha256": "00eb1a280300edc97c369fbe9c537f7d8c4fbcaf5c73127d52547e171f21dd83",
+      "target_count": 710,
+      "target_rate": 0.284,
+      "minimum_support_used": 13,
+      "ranking_eligible_state_count": 88,
+      "condition_seconds": 0.5945892179997827
+    },
+    {
+      "training_sample_size": 2500,
+      "sampling_seed": 123,
+      "sampled_training_trace_id_sha256": "574402d22e10830c201a696ffc8cda868858323c2661963440b10165edd15dc2",
+      "target_count": 710,
+      "target_rate": 0.284,
+      "minimum_support_used": 13,
+      "ranking_eligible_state_count": 88,
+      "condition_seconds": 0.5881848120006907
+    },
+    {
+      "training_sample_size": 2500,
+      "sampling_seed": 456,
+      "sampled_training_trace_id_sha256": "90b35540939007e8e5684fac96db80b65610f23b35caa5643f71ca05a42be34f",
+      "target_count": 710,
+      "target_rate": 0.284,
+      "minimum_support_used": 13,
+      "ranking_eligible_state_count": 86,
+      "condition_seconds": 0.59394059799979
+    },
+    {
+      "training_sample_size": 5000,
+      "sampling_seed": 42,
+      "sampled_training_trace_id_sha256": "04937559524a44c063937f3b3cff6a9a31af3202352901a16608344578a73703",
+      "target_count": 1420,
+      "target_rate": 0.284,
+      "minimum_support_used": 25,
+      "ranking_eligible_state_count": 88,
+      "condition_seconds": 0.6681775199995172
+    },
+    {
+      "training_sample_size": 5000,
+      "sampling_seed": 123,
+      "sampled_training_trace_id_sha256": "f45b544f85eb3bf1caadec1dc37f80326e54dfb3c69b9256547666464c578c79",
+      "target_count": 1420,
+      "target_rate": 0.284,
+      "minimum_support_used": 25,
+      "ranking_eligible_state_count": 88,
+      "condition_seconds": 0.6404277830006322
+    },
+    {
+      "training_sample_size": 5000,
+      "sampling_seed": 456,
+      "sampled_training_trace_id_sha256": "6b8311a03c6219792e3f0b1c88840004d4f21adc82cb055a793cfb6f76769228",
+      "target_count": 1420,
+      "target_rate": 0.284,
+      "minimum_support_used": 25,
+      "ranking_eligible_state_count": 88,
+      "condition_seconds": 0.6313175810000757
+    },
+    {
+      "training_sample_size": 7341,
+      "sampling_seed": null,
+      "sampled_training_trace_id_sha256": "59c7b8869b0aab341fb7695b01157bbc731c8047ee271abc2e4105312e2122aa",
+      "target_count": 2085,
+      "target_rate": 0.2840212505108296,
+      "minimum_support_used": 37,
+      "ranking_eligible_state_count": 88,
+      "condition_seconds": 2.115843608999967
+    }
+  ],
+  "exact_verification": {
+    "missing_state_count_verified": 68,
+    "model_built": true,
+    "storm_model_state_count": 1221,
+    "storm_model_transition_count": 1603,
+    "initial_state_id": 0,
+    "baseline_target_probability": 0.3416445845150787,
+    "stormpy_version": "1.13.2"
+  },
+  "ranking_baselines_skipped": false,
+  "random_baseline_repeats_per_condition": 0,
+  "reliability_thresholds": {
+    "f1_absolute_gap_from_full_max": 0.05,
+    "roc_auc_absolute_gap_from_full_max": 0.02,
+    "top10_overlap_fraction_min": 0.7,
+    "top20_overlap_fraction_min": 0.6,
+    "exact_probability_raising_count_min": 15,
+    "f1_standard_deviation_max": 0.05,
+    "exact_pass_count_standard_deviation_max": 2.0
+  },
+  "reliability_threshold_interpretation": "Analyst-selected exploratory operational criteria, not universal statistical laws.",
+  "score_interpretation": "combined_ranking_score is a ranking heuristic; it is neither a probability nor a causal score.",
+  "causal_interpretation": "State-based exact probability raising does not establish historical path-conditioned causality.",
+  "started_at": "2026-08-11T08:38:08.689504+00:00",
+  "completed_at": "2026-08-11T08:38:18.512879+00:00",
+  "total_runtime_seconds": 9.826358833000086
+}
