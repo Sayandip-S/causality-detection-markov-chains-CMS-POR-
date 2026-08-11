@@ -1,0 +1,16 @@
+training_sample_size,model,thresholds_are_analyst_selected,f1_gap_from_full,f1_within_0_05_of_full,roc_auc_gap_from_full,roc_auc_within_0_02_of_full,f1_standard_deviation,f1_standard_deviation_below_0_05,top10_overlap_fraction_mean,top10_overlap_at_least_0_70,top20_overlap_fraction_mean,top20_overlap_at_least_0_60,exact_probability_raising_count_mean,at_least_15_exact_probability_raising,exact_pass_count_standard_deviation,exact_pass_count_standard_deviation_below_2,all_operational_criteria_pass
+500,Decision Tree,True,0.12515677807702688,False,0.004008378155492154,True,0.06088522553235972,False,0.15999999999999998,False,0.31,False,8.6,False,2.3021728866442674,False,False
+500,Logistic Regression,True,0.04564276281981933,True,0.012274435678681694,True,0.06246798147618042,False,0.15999999999999998,False,0.31,False,8.6,False,2.3021728866442674,False,False
+500,Random Forest,True,0.05637028976502739,False,0.009758945578479561,True,0.06212274404148381,False,0.15999999999999998,False,0.31,False,8.6,False,2.3021728866442674,False,False
+1000,Decision Tree,True,0.0417994832327174,True,0.006937667398903835,True,0.11530206479730674,False,0.27999999999999997,False,0.45999999999999996,False,10.8,False,2.3874672772626644,False,False
+1000,Logistic Regression,True,0.0022506703426339314,True,0.01632572633791407,True,0.06165811783283637,False,0.27999999999999997,False,0.45999999999999996,False,10.8,False,2.3874672772626644,False,False
+1000,Random Forest,True,0.039734318758361586,True,0.0017255497252286478,True,0.05547898374344241,False,0.27999999999999997,False,0.45999999999999996,False,10.8,False,2.3874672772626644,False,False
+2500,Decision Tree,True,0.06603879934861065,False,0.012558183662596867,True,0.0778283458160875,False,0.36,False,0.56,False,11.6,False,2.3021728866442674,False,False
+2500,Logistic Regression,True,0.007457313241328756,True,0.013552177371682128,True,0.02208254423450424,True,0.36,False,0.56,False,11.6,False,2.3021728866442674,False,False
+2500,Random Forest,True,0.00202246427447772,True,0.011799478919597484,True,0.02466004817126805,True,0.36,False,0.56,False,11.6,False,2.3021728866442674,False,False
+5000,Decision Tree,True,0.03325320749963315,True,0.00506922195543813,True,0.03233969195167519,True,0.4600000000000001,False,0.72,True,13.2,False,0.8366600265340756,True,False
+5000,Logistic Regression,True,0.026208527769176482,True,0.0131758901790211,True,0.027884310576017764,True,0.4600000000000001,False,0.72,True,13.2,False,0.8366600265340756,True,False
+5000,Random Forest,True,0.0005876016474977153,True,0.0031585938127176583,True,0.021995888747160512,True,0.4600000000000001,False,0.72,True,13.2,False,0.8366600265340756,True,False
+7341,Decision Tree,True,0.0,True,0.0,True,0.0,True,1.0,True,1.0,True,15.0,True,0.0,True,True
+7341,Logistic Regression,True,0.0,True,0.0,True,0.0,True,1.0,True,1.0,True,15.0,True,0.0,True,True
+7341,Random Forest,True,0.0,True,0.0,True,0.0,True,1.0,True,1.0,True,15.0,True,0.0,True,True
