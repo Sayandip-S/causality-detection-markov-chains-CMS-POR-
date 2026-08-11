@@ -219,6 +219,10 @@ not changing cohort composition or split membership. The features still
 encode only visited-state presence; they do not preserve full sequence order,
 transition order, or repeated state visits.
 
+The follow-up k=20 training-sample-size, ranking-stability, and exact candidate
+quality experiment is documented in
+[BRP sample-size stability](../../docs/brp_sample_size_stability.md).
+
 ## 6. First Dataset: Summary Prefix Features
 
 The first ML dataset used simple summary features calculated from each prefix:
@@ -1699,3 +1703,277 @@ Relevant experiment runners:
 - [Common-cohort dataset generator](../../scripts/generate_brp_common_cohort_datasets.py)
 - [Common-cohort baseline runner](../../scripts/run_brp_common_cohort_baselines.py)
 - [Exact candidate verifier](../../scripts/verify_brp_candidate_states.py)
+
+# Meeting Update — Training Sample Size and Candidate Stability
+
+**Date: 2026-08-03**
+
+## 1. Research question
+
+The follow-up experiment asks:
+
+> At what training-sample size do prediction quality, candidate-state identity,
+> and exact Storm-verified candidate quality become unstable, and does this
+> differ across Logistic Regression, Decision Tree, and Random Forest?
+
+Reducing the training set is not automatically the same as underfitting.
+Underfitting means that a model cannot represent or learn the available signal
+adequately. Reducing data instead increases estimation uncertainty: different
+subsets may support different fitted parameters, predictions, and candidate
+rankings, and rare learnable patterns may not appear often enough to be learned
+stably.
+
+## 2. Experimental design
+
+The experiment uses the k=20 fixed observation window and the common-cohort
+visited-state dataset. The design is:
+
+- total common-cohort rows: 9,177;
+- fixed training pool: 7,341 rows;
+- fixed test set: 1,836 rows;
+- training sizes: 500, 1,000, 2,500, 5,000, and 7,341;
+- reduced-sample seeds: 42, 123, 456, 789, and 2026;
+- models: Logistic Regression, Decision Tree, and Random Forest;
+- candidate list length: 20 states;
+- candidate statistics: sampled training rows only;
+- exact Storm verification: applied after candidate selection.
+
+Every reduced sample is drawn by stratified sampling from the same 7,341-row
+training pool. For a given size and seed, all three models receive identical
+training trace IDs. The 7,341-row condition is one deterministic fit on the
+complete pool, not five duplicate samples.
+
+The test set remains fixed for every condition. If the test set also changed,
+differences in a metric could come from either the training subset or the test
+composition. Reusing the same 1,836 traces isolates training-sample effects and
+makes model results directly comparable. Test labels never enter candidate
+construction or ranking.
+
+## 3. Understanding mean and standard deviation
+
+For each reduced sample size, the experiment is repeated with five random
+stratified subsets. If the five measurements are
+`x₁, x₂, ..., x₅`, their mean is:
+
+```text
+x̄ = (x₁ + x₂ + ... + x₅) / 5
+```
+
+The reported sample standard deviation is:
+
+```text
+s = sqrt[ Σᵢ(xᵢ - x̄)² / (n - 1) ], where n = 5
+```
+
+The mean is the average result across the five sampled training sets. Standard
+deviation measures sensitivity to which traces were selected. A large standard
+deviation means that the conclusion is unstable across samples; a small one
+means that different samples give similar results. The full 7,341-row condition
+has no sampling standard deviation because it is one deterministic reference
+using the complete training pool.
+
+## 4. Prediction results
+
+Full five-seed F1 results are:
+
+| Training rows | Logistic Regression | Decision Tree | Random Forest |
+|---:|---:|---:|---:|
+| 500 | 0.336 ± 0.062 | 0.343 ± 0.061 | 0.330 ± 0.062 |
+| 1,000 | 0.288 ± 0.062 | 0.260 ± 0.115 | 0.313 ± 0.055 |
+| 2,500 | 0.283 ± 0.022 | 0.284 ± 0.078 | 0.271 ± 0.025 |
+| 5,000 | 0.264 ± 0.028 | 0.251 ± 0.032 | 0.274 ± 0.022 |
+| 7,341 | 0.291 | 0.218 | 0.273 |
+
+![Prediction F1 stability](../../results/systematic/brp_stress_error/sample_size_full/presentation_plots/prediction_f1_stability.png)
+
+The higher F1 values at 500 rows do not show superior discrimination. The
+class-balanced models can change their decision thresholds and predict more
+positives, raising recall and therefore F1. Meanwhile, mean ROC-AUC stays
+between approximately 0.492 and 0.509 across the table, which is close to
+random ranking at 0.5. Decision Tree is especially sample-sensitive at 1,000
+rows, where its F1 standard deviation is 0.115.
+
+![Prediction ROC-AUC stability](../../results/systematic/brp_stress_error/sample_size_full/presentation_plots/prediction_roc_auc_stability.png)
+
+## 5. Candidate ranking stability
+
+Top-k overlap compares a sampled ranking with the deterministic full-training
+ranking:
+
+```text
+top-k overlap = |sample top-k ∩ full top-k| / k
+```
+
+Jaccard similarity divides the same intersection by the size of the union,
+`|A ∩ B| / |A ∪ B|`, so it penalizes candidates appearing in only one list.
+Spearman correlation measures agreement in rank order among the states shared
+by the two top-20 lists. Correlation can be unstable even when set overlap is
+moderate because shared states may move substantially within the ranking.
+
+![Candidate overlap stability](../../results/systematic/brp_stress_error/sample_size_full/presentation_plots/candidate_stability_summary.png)
+
+At 5,000 rows, mean top-20 overlap reaches 0.72, but mean top-10 overlap is only
+0.46. The top of the candidate list is therefore less stable than the relative
+prediction metrics.
+
+![Candidate rank correlation](../../results/systematic/brp_stress_error/sample_size_full/presentation_plots/candidate_rank_correlation.png)
+
+The five-seed mean Spearman correlation at 5,000 rows is only 0.284 with SD
+0.343. This indicates that candidate order remains strongly dependent on which
+training traces were sampled.
+
+## 6. Exact candidate quality
+
+For every ranking run, each of its top 20 states is checked using exact Storm
+model checking. A state passes when:
+
+```text
+P_candidate(F target) > P_initial(F target)
+```
+
+![Exact candidate quality](../../results/systematic/brp_stress_error/sample_size_full/presentation_plots/exact_candidate_quality.png)
+
+| Training rows | Verified candidates out of 20 |
+|---:|---:|
+| 500 | 8.60 ± 2.30 |
+| 1,000 | 10.80 ± 2.39 |
+| 2,500 | 11.60 ± 2.30 |
+| 5,000 | 13.20 ± 0.84 |
+| 7,341 | 15.00 |
+
+Only the full training reference reaches the selected threshold of 15 verified
+candidates out of 20. This check is state-based probability raising: it asks
+about future target reachability when starting from the candidate state. It is
+not historical path-conditioned causality and does not estimate the effect of
+having visited that state earlier along an execution.
+
+## 7. Ranking-method comparison
+
+The experiment compares six ways of choosing candidate states:
+
+- **Combined:** normalized positive LR coefficient, RF importance, positive
+  empirical probability difference, and support weighting.
+- **Empirical only:** empirical target-probability difference.
+- **LR only:** positive Logistic Regression coefficient.
+- **RF only:** Random Forest feature importance.
+- **Frequency only:** visited-state support.
+- **Random:** deterministic random sets drawn from eligible observed states.
+
+![Ranking-method comparison](../../results/systematic/brp_stress_error/sample_size_full/presentation_plots/ranking_method_comparison.png)
+
+Empirical-only ranking produces the largest mean exact pass count at every
+tested size in this experiment. This does not establish that it is universally
+optimal: the result is specific to this model, feature representation, horizon,
+and quality measure. The combined method averages 8.60 passes at 500 rows,
+slightly below the random mean of 9.55, but exceeds the random mean from 1,000
+rows onward. Frequency-only produces zero exact probability-raising states at
+every size. The combined score's added value is therefore not established by
+this experiment.
+
+## 8. Reliability criteria
+
+The reliability thresholds are analyst-selected operational criteria, not
+universal statistical laws. Prediction checks require F1 and ROC-AUC to remain
+close to their full-training references and F1 SD to be below 0.05. Candidate
+checks require top-10 overlap of at least 0.70, top-20 overlap of at least 0.60,
+at least 15 exact passes, and exact-pass-count SD below 2.0.
+
+![Reliability summary](../../results/systematic/brp_stress_error/sample_size_full/presentation_plots/reliability_summary.png)
+
+The prediction-relative criteria pass earlier: Logistic Regression and Random
+Forest first pass them at 2,500 rows, while Decision Tree first passes at 5,000.
+Candidate criteria require more data. At 5,000 rows top-20 overlap and candidate
+variance pass, but top-10 overlap and exact pass count fail. Only the full
+7,341-row condition passes every selected criterion.
+
+## 9. 17/20 versus 15/20
+
+The earlier result of 17 verified candidates out of 20 came from the complete
+9,723-row operational k20 candidate dataset, whose population satisfied
+`number_of_transitions > 20`. The current result of 15/20 comes from the
+stricter common-cohort training pool of 7,341 rows, whose parent cohort satisfies
+`number_of_transitions > 50`; the fixed 1,836-row test set is excluded from
+candidate discovery.
+
+The two top-20 lists share 13 states. Their exact initial baseline is identical,
+and all exact probabilities and pass flags for shared states agree exactly.
+The 17/20 versus 15/20 difference is therefore caused by population-dependent
+candidate substitutions, not inconsistent Storm verification.
+
+## 10. Main findings
+
+1. Prediction metrics can appear stable before candidate rankings stabilize.
+2. Similar F1 does not imply that the same candidate states are selected.
+3. ROC-AUC remains near random ranking at every sample size.
+4. Decision Tree is the most variable model in the small-data conditions.
+5. Exact candidate quality improves overall with sample size.
+6. Five thousand training rows are still insufficient for stable top-10
+   candidate identity.
+7. Empirical-difference-only ranking outperforms the combined heuristic on exact
+   pass count in this experiment.
+8. Exact Storm verification remains necessary because empirical and fitted-model
+   evidence do not guarantee exact probability raising.
+
+## 11. Limitations
+
+- Only five reduced-sample seeds are evaluated.
+- Only one BRP model setting is used.
+- Candidate stability is evaluated only at k=20.
+- The full-training condition is one deterministic reference and has no
+  sampling-variance estimate.
+- Binary state-presence features ignore order and repeated visits.
+- Reliability thresholds are analyst-selected.
+- Exact verification is state-based, not intervention-based.
+- The analysis does not establish historical path-conditioned causality.
+- Random baselines are restricted to eligible observed states.
+
+## 12. Two-minute meeting explanation
+
+The question in this follow-up was how much training data we need before the
+BRP results become stable—not only the prediction score, but also which states
+the machine-learning pipeline proposes and whether Storm verifies those states.
+I used the k=20 common cohort, with 9,177 traces, and reconstructed the existing
+fixed split: 7,341 traces in the training pool and the same 1,836 test traces
+for every condition. I then sampled 500, 1,000, 2,500, and 5,000 training traces
+with five stratified seeds, plus one full-training reference. Keeping the test
+set fixed means changes come from training-data selection rather than a changing
+evaluation population.
+
+The prediction result needs caution. F1 is sometimes higher with only 500
+traces because the balanced models change how often they predict the positive
+class, which raises recall. But ROC-AUC stays around 0.5 at every size, so this
+does not represent stronger discrimination. Decision Tree is particularly
+unstable at 1,000 rows, with F1 standard deviation about 0.115.
+
+Candidate rankings need more data than the prediction-relative metrics. At
+5,000 rows, the mean top-20 overlap with the full ranking is 72 percent, but
+top-10 overlap is only 46 percent, and shared candidates still move considerably
+in rank. Exact Storm verification shows a clearer progression: the average
+number of probability-raising states rises from 8.6 out of 20 at 500 rows to
+13.2 at 5,000, while the full reference reaches 15.
+
+The empirical-difference-only ranking produces the most verified candidates at
+every tested size. The combined heuristic is slightly worse than random at 500
+rows and better than random from 1,000 onward, so its added value is not yet
+established. The main limitation is that this is one BRP setting at k=20 with
+state-presence features. Exact verification is state-based and does not prove
+historical causality.
+
+## 13. Reproduction and artifact links
+
+The recorded full experiment runner took 16.43 seconds using the existing
+processed dataset. This timing excludes trace generation and presentation-plot
+rendering.
+
+![Runtime summary](../../results/systematic/brp_stress_error/sample_size_full/presentation_plots/runtime_summary.png)
+
+- [Full five-seed report](../../results/systematic/brp_stress_error/sample_size_full/full_run_report.md)
+- [Aggregated prediction metrics](../../results/systematic/brp_stress_error/sample_size_full/prediction_aggregated.csv)
+- [Aggregated candidate stability](../../results/systematic/brp_stress_error/sample_size_full/candidate_stability_aggregated.csv)
+- [Aggregated exact candidate quality](../../results/systematic/brp_stress_error/sample_size_full/exact_candidate_quality_aggregated.csv)
+- [Ranking-method comparison](../../results/systematic/brp_stress_error/sample_size_full/ranking_method_comparison.csv)
+- [Reliability assessment](../../results/systematic/brp_stress_error/sample_size_full/reliability_assessment.csv)
+- [Presentation plot directory](../../results/systematic/brp_stress_error/sample_size_full/presentation_plots/)
+- [Experiment configuration](../../experiments/brp_k20_sample_size_stability.json)
+- [Experiment runner](../../scripts/run_brp_sample_size_experiment.py)
+- [Plotting script](../../scripts/plot_brp_sample_size_experiment.py)
