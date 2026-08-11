@@ -1,0 +1,36 @@
+{
+  "experiment_name": "brp_k20_sample_size_stability",
+  "dataset": "data/processed/brp_stress_common50_visited_state_dataset_k20.csv",
+  "common_cohort_manifest": "results/systematic/brp_stress_error/metrics/common_cohort_manifest.json",
+  "common_cohort_summary": "results/systematic/brp_stress_error/metrics/common_cohort_summary.json",
+  "existing_exact_reachability": "results/systematic/brp_stress_error/reachability/candidate_exact_reachability.csv",
+  "prism_model": "models/prism/brp/brp_stress_error_target.pm",
+  "property_file": "models/properties/brp/brp_target.pctl",
+  "observation_window": 20,
+  "training_sample_sizes": [500, 1000, 2500, 5000, 7341],
+  "sampling_seeds": [42, 123, 456, 789, 2026],
+  "full_training_size": 7341,
+  "split_seed": 42,
+  "test_size": 0.2,
+  "top_k": 20,
+  "minimum_candidate_support": 50,
+  "candidate_support_rule": {
+    "minimum_count_floor": 5,
+    "training_fraction": 0.005,
+    "formula": "max(5, ceil(0.005 * training_sample_size))"
+  },
+  "models": [
+    "logistic_regression",
+    "decision_tree",
+    "random_forest"
+  ],
+  "reliability_thresholds": {
+    "f1_absolute_gap_from_full_max": 0.05,
+    "roc_auc_absolute_gap_from_full_max": 0.02,
+    "top10_overlap_fraction_min": 0.70,
+    "top20_overlap_fraction_min": 0.60,
+    "exact_probability_raising_count_min": 15,
+    "f1_standard_deviation_max": 0.05,
+    "exact_pass_count_standard_deviation_max": 2.0
+  }
+}

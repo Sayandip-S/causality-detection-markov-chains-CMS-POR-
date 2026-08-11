@@ -98,30 +98,24 @@ def validate_model(model: Any, feature_columns: list[str], name: str) -> None:
         raise ValueError(f"{name} must be fitted for binary classes [0, 1].")
 
 
-def extract_candidates(
-    dataset_path: Path,
-    model_dir: Path,
+def rank_candidate_states(
+    dataset: pd.DataFrame,
+    feature_columns: list[str],
+    logistic_model: Any,
+    random_forest_model: Any,
     minimum_support: int,
-) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Calculate empirical and fitted-model evidence for candidate states."""
+) -> pd.DataFrame:
+    """Rank candidates using only the supplied labeled discovery rows."""
 
     if minimum_support <= 0:
         raise ValueError("minimum-support must be a positive integer.")
-    if not dataset_path.is_file():
-        raise FileNotFoundError(f"Dataset not found: {dataset_path}")
-
-    feature_columns = validate_feature_schema(
-        load_json(model_dir / "feature_columns.json")
-    )
-    metadata = load_json(model_dir / "metadata.json")
-    dataset_columns = pd.read_csv(dataset_path, nrows=0).columns
+    feature_columns = validate_feature_schema(feature_columns)
     missing_features = [
-        column for column in feature_columns if column not in dataset_columns
+        column for column in feature_columns if column not in dataset.columns
     ]
     if missing_features:
         raise ValueError(f"Dataset is missing expected features: {missing_features}")
 
-    dataset = pd.read_csv(dataset_path)
     if dataset.empty:
         raise ValueError("Dataset contains no retained traces.")
     if "target" not in dataset.columns:
@@ -144,8 +138,6 @@ def extract_candidates(
             f"{invalid_binary_columns}"
         )
 
-    logistic_model = joblib.load(model_dir / "logistic_regression.joblib")
-    random_forest_model = joblib.load(model_dir / "random_forest.joblib")
     validate_model(logistic_model, feature_columns, "Logistic Regression")
     validate_model(random_forest_model, feature_columns, "Random Forest")
 
@@ -241,6 +233,34 @@ def extract_candidates(
         ascending=[False, False, True],
     ).reset_index(drop=True)
     candidates.insert(0, "rank", np.arange(1, len(candidates) + 1))
+    return candidates
+
+
+def extract_candidates(
+    dataset_path: Path,
+    model_dir: Path,
+    minimum_support: int,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """Calculate empirical and fitted-model evidence for candidate states."""
+
+    if not dataset_path.is_file():
+        raise FileNotFoundError(f"Dataset not found: {dataset_path}")
+    feature_columns = validate_feature_schema(
+        load_json(model_dir / "feature_columns.json")
+    )
+    metadata = load_json(model_dir / "metadata.json")
+    dataset = pd.read_csv(dataset_path)
+    logistic_model = joblib.load(model_dir / "logistic_regression.joblib")
+    random_forest_model = joblib.load(model_dir / "random_forest.joblib")
+    candidates = rank_candidate_states(
+        dataset,
+        feature_columns,
+        logistic_model,
+        random_forest_model,
+        minimum_support,
+    )
+    total_count = len(dataset)
+    total_targets = int(dataset["target"].sum())
 
     extraction_metadata = {
         "observation_window": metadata.get("observation_window"),
